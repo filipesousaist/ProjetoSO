@@ -251,6 +251,31 @@ void grid_print (grid_t* gridPtr){
 
 
 /* =============================================================================
+ * grid_printToFile
+ * =============================================================================
+ */
+void grid_printToFile (grid_t* gridPtr, FILE* filePtr){
+    long width  = gridPtr->width;
+    long height = gridPtr->height;
+    long depth  = gridPtr->depth;
+    long z;
+
+    for (z = 0; z < depth; z++) {
+        fprintf(filePtr, "[z = %li]\n", z);
+        long x;
+        for (x = 0; x < width; x++) {
+            long y;
+            for (y = 0; y < height; y++) {
+                fprintf(filePtr, "%4li", *grid_getPointRef(gridPtr, x, y, z));
+            }
+            fputs("", filePtr);
+        }
+        fputs("", filePtr);
+    }
+}
+
+
+/* =============================================================================
  *
  * End of grid.c
  *

@@ -54,7 +54,7 @@
 #ifndef MAZE_H
 #define MAZE_H 1
 
-
+#include <stdio.h>
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/list.h"
@@ -98,7 +98,7 @@ long maze_read (maze_t* mazePtr, FILE* filePointer);
  * maze_checkPaths
  * =============================================================================
  */
-bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathListPtr, bool_t doPrintPaths);
+bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathListPtr, FILE* outputFilePtr);
 
 
 #endif /* MAZE_H */

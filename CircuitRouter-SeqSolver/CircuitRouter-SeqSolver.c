@@ -55,6 +55,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "lib/list.h"
 #include "maze.h"
 #include "router.h"
@@ -159,15 +160,15 @@ int main(int argc, char** argv){
     /*
      * Initialization
      */
-    char* fileName = parseArgs(argc, (char** const)argv);
+    char* inputFileName = parseArgs(argc, (char** const)argv);
     maze_t* mazePtr = maze_alloc();
     assert(mazePtr);
 
-    FILE* filePointer = fopen(fileName, "r"); 
-    assert(filePointer);
+    FILE* inputFilePtr = fopen(inputFileName, "r"); 
+    assert(inputFilePtr);
     
-    long numPathToRoute = maze_read(mazePtr, filePointer);
-    fclose(filePointer);
+    long numPathToRoute = maze_read(mazePtr, inputFilePtr);
+    fclose(inputFilePtr);
     router_t* routerPtr = router_alloc(global_params[PARAM_XCOST],
                                        global_params[PARAM_YCOST],
                                        global_params[PARAM_ZCOST],
@@ -192,6 +193,7 @@ int main(int argc, char** argv){
         vector_t* pathVectorPtr = (vector_t*)list_iter_next(&it, pathVectorListPtr);
         numPathRouted += vector_getSize(pathVectorPtr);
 	}
+
     printf("Paths routed    = %li\n", numPathRouted);
     printf("Elapsed time    = %f seconds\n", TIMER_DIFF_SECONDS(startTime, stopTime));
 
@@ -200,12 +202,45 @@ int main(int argc, char** argv){
      * Check solution and clean up
      */
     assert(numPathRouted <= numPathToRoute);
-    bool_t status = maze_checkPaths(mazePtr, pathVectorListPtr, global_doPrint);
+
+    /* Create or open output file */
+    char* outputFileName = \
+        (char *) malloc((strlen(inputFileName) + 5) * sizeof(char));
+    assert(outputFileName);
+    sprintf(outputFileName, "%s.res", inputFileName);
+    printf("%s\n", outputFileName);
+
+    FILE* outputFilePtr;
+    if ((outputFilePtr = fopen(outputFileName, "r")) != NULL)
+    {
+        /* results file already exists */
+        char* oldFileName = \
+            (char *) malloc((strlen(outputFileName) + 5) * sizeof(char));
+        assert(oldFileName);
+        sprintf(oldFileName, "%s.old", outputFileName);
+
+        FILE* oldFilePtr = fopen(oldFileName, "w");
+        assert(oldFilePtr);
+
+        int c;
+        while ((c = fgetc(outputFilePtr)) != EOF)
+            fputc(c, oldFilePtr);
+
+        fclose(outputFilePtr);
+        fclose(oldFilePtr);
+        free(oldFileName);
+    }
+    outputFilePtr = fopen(outputFileName, "w");
+    assert(outputFilePtr);
+
+    bool_t status = maze_checkPaths(mazePtr, pathVectorListPtr, outputFilePtr);
     assert(status == TRUE);
     puts("Verification passed.");
 
     maze_free(mazePtr);
     router_free(routerPtr);
+    fclose(outputFilePtr);
+    free(outputFileName);
 
     list_iter_reset(&it, pathVectorListPtr);
     while (list_iter_hasNext(&it, pathVectorListPtr)) {
