@@ -164,6 +164,7 @@ int main(int argc, char** argv){
     assert(mazePtr);
 
     FILE* filePointer = fopen(fileName, "r"); 
+    assert(filePointer);
     
     long numPathToRoute = maze_read(mazePtr, filePointer);
     fclose(filePointer);
