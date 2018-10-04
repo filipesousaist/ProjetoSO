@@ -62,6 +62,8 @@
 #include "lib/timer.h"
 #include "lib/types.h"
 
+#define NUM_CHARS_EXT 4
+
 enum param_types {
     PARAM_BENDCOST = (unsigned char)'b',
     PARAM_XCOST    = (unsigned char)'x',
@@ -76,7 +78,7 @@ enum param_defaults {
     PARAM_DEFAULT_ZCOST    = 2,
 };
 
-bool_t global_doPrint = FALSE;
+bool_t global_doPrint = TRUE;
 char* global_inputFile = NULL;
 long global_params[256]; /* 256 = ascii limit */
 
@@ -122,16 +124,13 @@ static char* parseArgs (long argc, char* const argv[]){
 
     setDefaultParams();
 
-    while ((opt = getopt(argc, argv, "hb:px:y:z:")) != -1) {
+    while ((opt = getopt(argc, argv, "hb:x:y:z:")) != -1) {
         switch (opt) {
             case 'b':
             case 'x':
             case 'y':
             case 'z':
                 global_params[(unsigned char)opt] = atol(optarg);
-                break;
-            case 'p':
-                global_doPrint = TRUE;
                 break;
             case '?':
             case 'h':
@@ -144,8 +143,7 @@ static char* parseArgs (long argc, char* const argv[]){
         displayUsage(argv[0]);
         return NULL; 
     }
-    
-    assert(optind == argc - 1);
+
     return argv[optind];
  
     
@@ -164,10 +162,37 @@ int main(int argc, char** argv){
     maze_t* mazePtr = maze_alloc();
     assert(mazePtr);
 
-    FILE* inputFilePtr = fopen(inputFileName, "r"); 
+    /* Create or open output file */
+    char* outputFileName = (char *) \
+        malloc((strlen(inputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
+    assert(outputFileName);
+    sprintf(outputFileName, "%s.res", inputFileName);
+
+    FILE *inputFilePtr, *outputFilePtr;
+    if ((outputFilePtr = fopen(outputFileName, "r")) != NULL) {
+        /* results file already exists */
+        char* oldFileName = (char *) \
+            malloc((strlen(outputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
+        assert(oldFileName);
+        sprintf(oldFileName, "%s.old", outputFileName);
+
+        FILE* oldFilePtr = fopen(oldFileName, "w");
+        assert(oldFilePtr);
+
+        int c;
+        while ((c = fgetc(outputFilePtr)) != EOF)
+            fputc(c, oldFilePtr);
+
+        fclose(outputFilePtr);
+        fclose(oldFilePtr);
+        free(oldFileName);
+    }
+    inputFilePtr = fopen(inputFileName, "r"); 
     assert(inputFilePtr);
-    
-    long numPathToRoute = maze_read(mazePtr, inputFilePtr);
+    outputFilePtr = fopen(outputFileName, "w");
+    assert(outputFilePtr);
+
+    long numPathToRoute = maze_read(mazePtr, inputFilePtr, outputFilePtr);
     fclose(inputFilePtr);
     router_t* routerPtr = router_alloc(global_params[PARAM_XCOST],
                                        global_params[PARAM_YCOST],
@@ -194,8 +219,9 @@ int main(int argc, char** argv){
         numPathRouted += vector_getSize(pathVectorPtr);
 	}
 
-    printf("Paths routed    = %li\n", numPathRouted);
-    printf("Elapsed time    = %f seconds\n", TIMER_DIFF_SECONDS(startTime, stopTime));
+    fprintf(outputFilePtr, "Paths routed    = %li\n", numPathRouted);
+    fprintf(outputFilePtr, "Elapsed time    = %f seconds\n", \
+        TIMER_DIFF_SECONDS(startTime, stopTime));
 
 
     /*
@@ -203,44 +229,17 @@ int main(int argc, char** argv){
      */
     assert(numPathRouted <= numPathToRoute);
 
-    /* Create or open output file */
-    char* outputFileName = \
-        (char *) malloc((strlen(inputFileName) + 5) * sizeof(char));
-    assert(outputFileName);
-    sprintf(outputFileName, "%s.res", inputFileName);
-    printf("%s\n", outputFileName);
-
-    FILE* outputFilePtr;
-    if ((outputFilePtr = fopen(outputFileName, "r")) != NULL)
-    {
-        /* results file already exists */
-        char* oldFileName = \
-            (char *) malloc((strlen(outputFileName) + 5) * sizeof(char));
-        assert(oldFileName);
-        sprintf(oldFileName, "%s.old", outputFileName);
-
-        FILE* oldFilePtr = fopen(oldFileName, "w");
-        assert(oldFilePtr);
-
-        int c;
-        while ((c = fgetc(outputFilePtr)) != EOF)
-            fputc(c, oldFilePtr);
-
-        fclose(outputFilePtr);
-        fclose(oldFilePtr);
-        free(oldFileName);
-    }
-    outputFilePtr = fopen(outputFileName, "w");
-    assert(outputFilePtr);
-
-    bool_t status = maze_checkPaths(mazePtr, pathVectorListPtr, outputFilePtr);
+    bool_t status = maze_checkPaths(mazePtr, pathVectorListPtr, \
+        global_doPrint, outputFilePtr);
     assert(status == TRUE);
-    puts("Verification passed.");
+    fputs("Verification passed.\n", outputFilePtr);
+
+    fclose(outputFilePtr);
+    free(outputFileName);
 
     maze_free(mazePtr);
     router_free(routerPtr);
-    fclose(outputFilePtr);
-    free(outputFileName);
+
 
     list_iter_reset(&it, pathVectorListPtr);
     while (list_iter_hasNext(&it, pathVectorListPtr)) {

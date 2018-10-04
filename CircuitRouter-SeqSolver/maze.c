@@ -150,7 +150,7 @@ static void addToGrid (grid_t* gridPtr, vector_t* vectorPtr, char* type){
  * =============================================================================
  */
 
-long maze_read (maze_t* mazePtr, FILE* filePointer){
+long maze_read (maze_t* mazePtr, FILE* inputFilePtr, FILE* outputFilePtr){
     
     /*
      * Parse input from stdin
@@ -165,7 +165,7 @@ long maze_read (maze_t* mazePtr, FILE* filePointer){
     vector_t* srcVectorPtr = mazePtr->srcVectorPtr;
     vector_t* dstVectorPtr = mazePtr->dstVectorPtr;
     
-    while (fgets(line, sizeof(line), filePointer)) {
+    while (fgets(line, sizeof(line), inputFilePtr)) {
         
         char code;
         long x1, y1, z1;
@@ -248,8 +248,10 @@ long maze_read (maze_t* mazePtr, FILE* filePointer){
     addToGrid(gridPtr, wallVectorPtr, "wall");
     addToGrid(gridPtr, srcVectorPtr,  "source");
     addToGrid(gridPtr, dstVectorPtr,  "destination");
-    printf("Maze dimensions = %li x %li x %li\n", width, height, depth);
-    printf("Paths to route  = %li\n", list_getSize(workListPtr));
+    fprintf(outputFilePtr, "Maze dimensions = %li x %li x %li\n", \
+        width, height, depth);
+    fprintf(outputFilePtr, "Paths to route  = %li\n", \
+        list_getSize(workListPtr));
     
     /*
      * Initialize work queue
@@ -270,7 +272,8 @@ long maze_read (maze_t* mazePtr, FILE* filePointer){
  * maze_checkPaths
  * =============================================================================
  */
-bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathVectorListPtr, FILE* outputFilePtr){
+bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathVectorListPtr, 
+    bool_t doPrint, FILE* outputFilePtr){
     grid_t* gridPtr = mazePtr->gridPtr;
     long width  = gridPtr->width;
     long height = gridPtr->height;
@@ -360,9 +363,10 @@ bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathVectorListPtr, FILE* output
     } /* iterate over pathVectorList */
 
     /* Print results to file */
-    fputs("\nRouted Maze:", outputFilePtr);
-    grid_printToFile(testGridPtr, outputFilePtr);
-    
+    if (doPrint){
+        fputs("\nRouted Maze:\n", outputFilePtr);
+        grid_printToFile(testGridPtr, outputFilePtr);
+    }
     grid_free(testGridPtr);
 
     return TRUE;
