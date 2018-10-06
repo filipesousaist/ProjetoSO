@@ -38,19 +38,19 @@ int main(int argc, char const *argv[])
 	long numChildren = 0;
 	long totalChildren = 0;
 	
-	if (argc == 2){
-		if(sscanf(argv[1],"%ld", &maxChildren)!=1){
-			printf("Invalid arguments\n");
-			exit(1);
-		}
-	}
-
 	char* argVector[3];
 	char buffer[BUFFERSIZE];
 	pid_t* pidVector = (pid_t*) malloc(PID_VECTOR_STEP * sizeof(pid_t));
 	assert(pidVector);
 	pid_t pid;
 	int pStatus;
+
+	if (argc == 2){
+		if(sscanf(argv[1],"%ld", &maxChildren)!=1){
+			printf("Invalid arguments\n");
+			exit(1);
+		}
+	}
 
 	while (TRUE) {
 		if (readLineArguments(argVector, 3, buffer, BUFFERSIZE) == -1) {
@@ -74,21 +74,29 @@ int main(int argc, char const *argv[])
 			pidVector[totalChildren ++] = pid;
 			++ numChildren;
 		}
+
 		else if (strcmp(argVector[0], "exit") == 0) {
-			for (long i = 0; i < totalChildren; ++ i)
-			{
-				waitpid(pidVector[i], &pStatus, 0);
-				printf("%li\n", (long) pidVector[i]);
-			}
-			exit(0);
+			
+			break;
 		}
+
 		else { 
 			displayError(2); /* invalid command */
 			continue;
 		}
 
 	}
-
+	
+	for (long i = 0; i < totalChildren; ++ i) {
+		waitpid(pidVector[i], &pStatus, 0);
+				
+		if (exitedNormally(pStatus))
+			printf("CHILD EXITED (PID=%li; return : OK)\n", (long) pidVector[i]);
+		else
+			printf("CHILD EXITED (PID=%li; return : NOK)\n", (long) pidVector[i]);
+	}
 	free(pidVector);
+	puts("END");
 	return 0;
+
 }
