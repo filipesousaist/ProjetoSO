@@ -12,6 +12,12 @@
 #define SEQ_SOLVER_PATH "../CircuitRouter-SeqSolver/CircuitRouter-SeqSolver"
 #define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
 
+enum {
+	ERR_LINEARGS = 0,
+	ERR_FILENAME,
+	ERR_COMMANDS
+}
+
 bool_t exitedNormally(int status)
 {
 	return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
@@ -20,13 +26,13 @@ bool_t exitedNormally(int status)
 void displayError(int code)
 {
 	switch (code) {
-		case 0:
+		case ERR_LINEARGS:
 			puts("Error reading line arguments");
 			break;
-		case 1:
+		case ERR_FILENAME:
 			puts("Invalid file name");
 			break;
-		case 2:
+		case ERR_COMMANDS:
 			puts("Invalid commands");
 			break;
 	}
@@ -54,13 +60,13 @@ int main(int argc, char const *argv[])
 
 	while (TRUE) {
 		if (readLineArguments(argVector, 3, buffer, BUFFERSIZE) == -1) {
-			displayError(0);
+			displayError(ERR_LINEARGS);
 			continue;
 		}
 
 		if (strcmp(argVector[0], "run") == 0) {
 			if (argVector[1] == NULL || (access(argVector[1], R_OK) == -1)) { 
-				displayError(1); /* invalid file name */
+				displayError(ERR_FILENAME); /* invalid file name */
 				continue;
 			}
 			if (numChildren == maxChildren) {
@@ -75,28 +81,27 @@ int main(int argc, char const *argv[])
 			++ numChildren;
 		}
 
-		else if (strcmp(argVector[0], "exit") == 0) {
-			
+		else if (strcmp(argVector[0], "exit") == 0) {		
 			break;
 		}
 
 		else { 
-			displayError(2); /* invalid command */
+			displayError(ERR_COMMANDS); /* invalid command */
 			continue;
 		}
-
 	}
 	
 	for (long i = 0; i < totalChildren; ++ i) {
 		waitpid(pidVector[i], &pStatus, 0);
-				
+		
+		printf("CHILD EXITED (PID=%li; ", (long) pidVector[i]);
 		if (exitedNormally(pStatus))
-			printf("CHILD EXITED (PID=%li; return : OK)\n", (long) pidVector[i]);
+			puts("return OK)");
 		else
-			printf("CHILD EXITED (PID=%li; return : NOK)\n", (long) pidVector[i]);
+			puts("return NOK)");
 	}
 	free(pidVector);
-	puts("END");
+	puts("END.");
 	return 0;
 
 }
