@@ -273,7 +273,7 @@ long maze_read (maze_t* mazePtr, FILE* inputFilePtr, FILE* outputFilePtr){
  * =============================================================================
  */
 bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathVectorListPtr, 
-    bool_t doPrint, FILE* outputFilePtr){
+    FILE* outputFilePtr){
     grid_t* gridPtr = mazePtr->gridPtr;
     long width  = gridPtr->width;
     long height = gridPtr->height;
@@ -363,10 +363,9 @@ bool_t maze_checkPaths (maze_t* mazePtr, list_t* pathVectorListPtr,
     } /* iterate over pathVectorList */
 
     /* Print results to file */
-    if (doPrint){
-        fputs("\nRouted Maze:\n", outputFilePtr);
-        grid_printToFile(testGridPtr, outputFilePtr);
-    }
+    fputs("\nRouted Maze:\n", outputFilePtr);
+    grid_printToFile(testGridPtr, outputFilePtr);
+    
     grid_free(testGridPtr);
 
     return TRUE;

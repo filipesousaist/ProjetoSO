@@ -13,18 +13,16 @@
 #define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
 
 enum {
-	ERR_LINEARGS = 0,
-	ERR_FILENAME,
+	ERR_LINEARGS, 
+	ERR_FILENAME, 
 	ERR_COMMANDS
-}
+};
 
-bool_t exitedNormally(int status)
-{
+bool_t exitedNormally(int status) {
 	return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }
 
-void displayError(int code)
-{
+void displayError(int code) {
 	switch (code) {
 		case ERR_LINEARGS:
 			puts("Error reading line arguments");
@@ -38,8 +36,7 @@ void displayError(int code)
 	}
 }
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
 	long maxChildren = -1; /* -1 means no limit of child processes */
 	long numChildren = 0;
 	long totalChildren = 0;
@@ -51,8 +48,8 @@ int main(int argc, char const *argv[])
 	pid_t pid;
 	int pStatus;
 
-	if (argc == 2){
-		if(sscanf(argv[1],"%ld", &maxChildren)!=1){
+	if (argc == 2) {
+		if (sscanf(argv[1],"%ld", &maxChildren)!=1) {
 			printf("Invalid arguments\n");
 			exit(1);
 		}
@@ -103,5 +100,4 @@ int main(int argc, char const *argv[])
 	free(pidVector);
 	puts("END.");
 	return 0;
-
 }
