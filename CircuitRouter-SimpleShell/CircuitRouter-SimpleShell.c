@@ -13,8 +13,7 @@
 #define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
 
 enum {
-	ERR_LINEARGS, 
-	ERR_FILENAME, 
+	ERR_LINEARGS,
 	ERR_COMMANDS
 };
 
@@ -25,13 +24,10 @@ bool_t exitedNormally(int status) {
 void displayError(int code) {
 	switch (code) {
 		case ERR_LINEARGS:
-			puts("Error reading line arguments");
-			break;
-		case ERR_FILENAME:
-			puts("Invalid file name");
+			fputs("Error reading line arguments", stderr);
 			break;
 		case ERR_COMMANDS:
-			puts("Invalid commands");
+			fputs("Invalid commands", stderr);
 			break;
 	}
 }
@@ -50,7 +46,7 @@ int main(int argc, char const *argv[]) {
 
 	if (argc == 2) {
 		if (sscanf(argv[1],"%ld", &maxChildren)!=1) {
-			printf("Invalid arguments\n");
+			fputs("Invalid arguments\n", stderr);
 			exit(1);
 		}
 	}
@@ -62,10 +58,6 @@ int main(int argc, char const *argv[]) {
 		}
 
 		if (strcmp(argVector[0], "run") == 0) {
-			if (argVector[1] == NULL || (access(argVector[1], R_OK) == -1)) { 
-				displayError(ERR_FILENAME); /* invalid file name */
-				continue;
-			}
 			if (numChildren == maxChildren) {
 				wait(&pStatus);
 				-- numChildren;
