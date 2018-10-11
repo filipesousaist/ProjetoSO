@@ -1,7 +1,7 @@
 Maze dimensions = 64 x 64 x 3
 Paths to route  = 48
 Paths routed    = 48
-Elapsed time    = 0.332749 seconds
+Elapsed time    = 0.274394 seconds
 
 Routed Maze:
 [z = 0]

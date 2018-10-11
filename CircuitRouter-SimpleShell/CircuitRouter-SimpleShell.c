@@ -15,7 +15,8 @@
 
 enum {
 	ERR_LINEARGS,
-	ERR_COMMANDS
+	ERR_COMMANDS,
+	ERR_FORK
 };
 
 bool_t exitedNormally(int status) {
@@ -29,6 +30,9 @@ void displayError(int code) {
 			break;
 		case ERR_COMMANDS:
 			fputs("Invalid commands", stderr);
+			break;
+		case ERR_FORK:
+			fputs("Aborted child", stderr);
 			break;
 	}
 }
@@ -66,6 +70,11 @@ int main(int argc, char const *argv[]) {
 			assert(pid);
 			*pid = fork();
 			char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
+			if (*pid == -1){
+				displayError(ERR_FORK);
+				continue;
+			}
+			
 			if (*pid == 0)
 				execv(SEQ_SOLVER_PATH, args);
 			vector_pushBack(pidVector, pid);
@@ -83,7 +92,7 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	while ((pid = vector_popBack(pidVector)) != NULL) {
-		waitpid(*pid, &pStatus, 0);
+		while(waitpid(*pid, &pStatus, 0) == -1);
 		
 		printf("CHILD EXITED (PID=%li; ", (long) *pid);
 		if (exitedNormally(pStatus))
