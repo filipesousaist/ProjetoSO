@@ -7,7 +7,7 @@ OBJS = $(SOURCES:%.c=%.o)
 CC   = gcc
 CFLAGS =-Wall -std=gnu99 -I../
 LDFLAGS=-lm
-TARGET = CircuitRouter-SeqSolver
+TARGET = ../CircuitRouter-SeqSolver
 
 all: $(TARGET)
 

@@ -6,7 +6,7 @@ OBJS = $(SOURCES:%.c=%.o)
 CC   = gcc
 CFLAGS =-Wall -std=gnu99 -I../
 LDFLAGS=
-TARGET = CircuitRouter-SimpleShell
+TARGET = ../CircuitRouter-SimpleShell
 
 all: $(TARGET)
 

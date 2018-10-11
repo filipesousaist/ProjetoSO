@@ -10,7 +10,6 @@
 
 #define BUFFERSIZE 200
 #define PID_VECTOR_START 20
-#define SEQ_SOLVER_PATH "../CircuitRouter-SeqSolver/CircuitRouter-SeqSolver"
 #define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
 
 enum {
@@ -26,13 +25,13 @@ bool_t exitedNormally(int status) {
 void displayError(int code) {
 	switch (code) {
 		case ERR_LINEARGS:
-			fputs("Error reading line arguments", stderr);
+			fputs("Error reading line arguments\n", stderr);
 			break;
 		case ERR_COMMANDS:
-			fputs("Invalid commands", stderr);
+			fputs("Invalid commands\n", stderr);
 			break;
 		case ERR_FORK:
-			fputs("Aborted child", stderr);
+			fputs("Error creating child process. Please try again\n", stderr);
 			break;
 	}
 }
@@ -40,16 +39,15 @@ void displayError(int code) {
 int main(int argc, char const *argv[]) {
 	long maxChildren = -1; /* -1 means no limit of child processes */
 	long numChildren = 0;
-	pid_t* pid;
-	int pStatus;
-	
+	int pStatus; /* process exit status */	
 	char* argVector[3];
 	char buffer[BUFFERSIZE];
+	pid_t* pid;
 	vector_t* pidVector = vector_alloc(PID_VECTOR_START);
 	assert(pidVector);
 
 	if (argc == 2) {
-		if (sscanf(argv[1],"%ld", &maxChildren)!=1) {
+		if (sscanf(argv[1],"%ld", &maxChildren) != 1) {
 			fputs("Invalid arguments\n", stderr);
 			exit(1);
 		}
@@ -63,29 +61,27 @@ int main(int argc, char const *argv[]) {
 
 		if (strcmp(argVector[0], "run") == 0) {
 			if (numChildren == maxChildren) {
-				wait(&pStatus);
+				while (wait(&pStatus) == -1);
 				-- numChildren;
 			}
+
 			pid = (pid_t *) malloc(sizeof(pid_t));
-			assert(pid);
-			*pid = fork();
-			char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
-			
-			if (*pid == -1){
-				displayError(ERR_FORK); /* child process went wrong */
+			assert(pid);			
+			if ((*pid = fork()) == -1) { /* error creating child */
+				displayError(ERR_FORK);
 				continue;
 			}
-
-			if (*pid == 0)
-				execv(SEQ_SOLVER_PATH, args);
-			vector_pushBack(pidVector, pid);
-			++ numChildren;
+			else if (*pid == 0) { /* child process */
+				char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
+				execv(SEQ_SOLVER_NAME, args);
+			}
+			else { /* parent process */
+				vector_pushBack(pidVector, pid);
+				++ numChildren;
+			}
 		}
-
-		else if (strcmp(argVector[0], "exit") == 0) {		
+		else if (strcmp(argVector[0], "exit") == 0)	
 			break;
-		}
-
 		else { 
 			displayError(ERR_COMMANDS); /* invalid command */
 			continue;
@@ -93,7 +89,7 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	while ((pid = vector_popBack(pidVector)) != NULL) {
-		while(waitpid(*pid, &pStatus, 0) == -1); /* wait error case */
+		while (waitpid(*pid, &pStatus, 0) == -1);
 		
 		printf("CHILD EXITED (PID=%li; ", (long) *pid);
 		if (exitedNormally(pStatus))
@@ -102,6 +98,7 @@ int main(int argc, char const *argv[]) {
 			puts("return NOK)");
 		free(pid);
 	}
+	vector_free(pidVector);
 	puts("END.");
 	return 0;
 }

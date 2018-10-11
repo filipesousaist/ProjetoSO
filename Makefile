@@ -1,4 +1,4 @@
-DIRS = CircuitRouter-SeqSolver CircuitRouter-SimpleShell
+DIRS = SeqSolver SimpleShell
 DIRS_MAKE = $(addprefix make., $(DIRS))
 DIRS_CLEAN = $(addprefix clean., $(DIRS))
 

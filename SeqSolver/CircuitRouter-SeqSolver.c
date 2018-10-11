@@ -56,6 +56,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "lib/list.h"
 #include "maze.h"
 #include "router.h"
@@ -157,6 +158,11 @@ int main(int argc, char** argv){
      * Initialization
      */
     char* inputFileName = parseArgs(argc, (char** const)argv);
+    if (inputFileName == NULL)
+    {
+        puts("No file name specified");
+        exit(1);
+    }
     maze_t* mazePtr = maze_alloc();
     assert(mazePtr);
 
@@ -166,9 +172,19 @@ int main(int argc, char** argv){
     assert(outputFileName);
     sprintf(outputFileName, "%s.res", inputFileName);
 
+    if (access(outputFileName, F_OK) == 0) {/* output file exists */
+        char* oldFileName = (char *) \
+            malloc((strlen(outputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
+        assert(oldFileName);
+        sprintf(oldFileName, "%s.old", outputFileName);
+
+        if (rename(outputFileName, oldFileName) == -1)
+            perror("rename");
+        free(oldFileName);
+    }
+    /*
     FILE *inputFilePtr, *outputFilePtr;
     if ((outputFilePtr = fopen(outputFileName, "r")) != NULL) {
-        /* results file already exists */
         char* oldFileName = (char *) \
             malloc((strlen(outputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
         assert(oldFileName);
@@ -185,8 +201,13 @@ int main(int argc, char** argv){
         fclose(oldFilePtr);
         free(oldFileName);
     }
-    inputFilePtr = fopen(inputFileName, "r"); 
-    assert(inputFilePtr);
+    */
+    FILE *inputFilePtr, *outputFilePtr;
+    if ((inputFilePtr = fopen(inputFileName, "r")) == NULL)
+    {
+        printf("Invalid file name: %s\n", inputFileName);
+        exit(1);
+    } 
     outputFilePtr = fopen(outputFileName, "w");
     assert(outputFilePtr);
 
