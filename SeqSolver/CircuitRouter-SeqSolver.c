@@ -182,26 +182,7 @@ int main(int argc, char** argv){
             perror("rename");
         free(oldFileName);
     }
-    /*
-    FILE *inputFilePtr, *outputFilePtr;
-    if ((outputFilePtr = fopen(outputFileName, "r")) != NULL) {
-        char* oldFileName = (char *) \
-            malloc((strlen(outputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
-        assert(oldFileName);
-        sprintf(oldFileName, "%s.old", outputFileName);
 
-        FILE* oldFilePtr = fopen(oldFileName, "w");
-        assert(oldFilePtr);
-
-        int c;
-        while ((c = fgetc(outputFilePtr)) != EOF)
-            fputc(c, oldFilePtr);
-
-        fclose(outputFilePtr);
-        fclose(oldFilePtr);
-        free(oldFileName);
-    }
-    */
     FILE *inputFilePtr, *outputFilePtr;
     if ((inputFilePtr = fopen(inputFileName, "r")) == NULL)
     {
