@@ -7,7 +7,7 @@ all: $(DIRS_MAKE)
 $(DIRS_MAKE):
 	@cd $(subst make.,,$@); make
 
-clean:$(DIRS_CLEAN)
+clean: $(DIRS_CLEAN)
 
 $(DIRS_CLEAN):
 	@cd $(subst clean.,,$@); make clean

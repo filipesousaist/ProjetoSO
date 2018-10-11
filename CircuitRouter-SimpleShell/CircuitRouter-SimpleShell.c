@@ -6,9 +6,10 @@
 #include <sys/wait.h>
 #include "../lib/commandlinereader.h"
 #include "../lib/types.h"
+#include "../lib/vector.h"
 
 #define BUFFERSIZE 200
-#define PID_VECTOR_STEP 20
+#define PID_VECTOR_START 20
 #define SEQ_SOLVER_PATH "../CircuitRouter-SeqSolver/CircuitRouter-SeqSolver"
 #define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
 
@@ -35,14 +36,13 @@ void displayError(int code) {
 int main(int argc, char const *argv[]) {
 	long maxChildren = -1; /* -1 means no limit of child processes */
 	long numChildren = 0;
-	long totalChildren = 0;
+	pid_t* pid;
+	int pStatus;
 	
 	char* argVector[3];
 	char buffer[BUFFERSIZE];
-	pid_t* pidVector = (pid_t*) malloc(PID_VECTOR_STEP * sizeof(pid_t));
+	vector_t* pidVector = vector_alloc(PID_VECTOR_START);
 	assert(pidVector);
-	pid_t pid;
-	int pStatus;
 
 	if (argc == 2) {
 		if (sscanf(argv[1],"%ld", &maxChildren)!=1) {
@@ -62,11 +62,13 @@ int main(int argc, char const *argv[]) {
 				wait(&pStatus);
 				-- numChildren;
 			}
-			pid = fork();
+			pid = (pid_t *) malloc(sizeof(pid_t));
+			assert(pid);
+			*pid = fork();
 			char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
-			if (pid == 0)
+			if (*pid == 0)
 				execv(SEQ_SOLVER_PATH, args);
-			pidVector[totalChildren ++] = pid;
+			vector_pushBack(pidVector, pid);
 			++ numChildren;
 		}
 
@@ -80,16 +82,16 @@ int main(int argc, char const *argv[]) {
 		}
 	}
 	
-	for (long i = 0; i < totalChildren; ++ i) {
-		waitpid(pidVector[i], &pStatus, 0);
+	while ((pid = vector_popBack(pidVector)) != NULL) {
+		waitpid(*pid, &pStatus, 0);
 		
-		printf("CHILD EXITED (PID=%li; ", (long) pidVector[i]);
+		printf("CHILD EXITED (PID=%li; ", (long) *pid);
 		if (exitedNormally(pStatus))
 			puts("return OK)");
 		else
 			puts("return NOK)");
+		free(pid);
 	}
-	free(pidVector);
 	puts("END.");
 	return 0;
 }
