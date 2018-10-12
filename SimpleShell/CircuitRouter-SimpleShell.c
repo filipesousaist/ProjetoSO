@@ -22,6 +22,17 @@ bool_t exitedNormally(int status) {
 	return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }
 
+void waitNext(vector_t* pidVector, vector_t* stateVector)
+{
+	pid_t* pidPtr = (pid_t *) malloc(sizeof(pid_t));
+	assert(pidPtr);
+	int* pStatusPtr = (int *) malloc(sizeof(int));
+	assert(pStatusPtr);
+	while ((*pidPtr = wait(pStatusPtr)) == -1);
+	vector_pushBack(pidVector, pidPtr);
+	vector_pushBack(stateVector, pStatusPtr);
+}
+
 void displayError(int code) {
 	switch (code) {
 		case ERR_LINEARGS:
@@ -39,12 +50,16 @@ void displayError(int code) {
 int main(int argc, char const *argv[]) {
 	long maxChildren = -1; /* -1 means no limit of child processes */
 	long numChildren = 0;
-	int pStatus; /* process exit status */	
+	
 	char* argVector[3];
 	char buffer[BUFFERSIZE];
-	pid_t* pid;
+	pid_t pid;
+	pid_t* pidPtr;
+	int* pStatusPtr; /* process exit status */	
 	vector_t* pidVector = vector_alloc(PID_VECTOR_START);
 	assert(pidVector);
+	vector_t* stateVector = vector_alloc(PID_VECTOR_START);
+	assert(stateVector);
 
 	if (argc == 2) {
 		if (sscanf(argv[1],"%ld", &maxChildren) != 1) {
@@ -61,24 +76,19 @@ int main(int argc, char const *argv[]) {
 
 		if (strcmp(argVector[0], "run") == 0) {
 			if (numChildren == maxChildren) {
-				while (wait(&pStatus) == -1);
+				waitNext(pidVector, stateVector);
 				-- numChildren;
 			}
-
-			pid = (pid_t *) malloc(sizeof(pid_t));
-			assert(pid);			
-			if ((*pid = fork()) == -1) { /* error creating child */
+			if ((pid = fork()) == -1) { /* error creating child */
 				displayError(ERR_FORK);
 				continue;
 			}
-			else if (*pid == 0) { /* child process */
+			else if (pid == 0) { /* child process */
 				char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
 				execv(SEQ_SOLVER_NAME, args);
 			}
-			else { /* parent process */
-				vector_pushBack(pidVector, pid);
+			else /* parent process */
 				++ numChildren;
-			}
 		}
 		else if (strcmp(argVector[0], "exit") == 0)	
 			break;
@@ -87,18 +97,22 @@ int main(int argc, char const *argv[]) {
 			continue;
 		}
 	}
+
+	for (;numChildren > 0; -- numChildren)
+		waitNext(pidVector, stateVector);
 	
-	while ((pid = vector_popBack(pidVector)) != NULL) {
-		while (waitpid(*pid, &pStatus, 0) == -1);
-		
-		printf("CHILD EXITED (PID=%li; ", (long) *pid);
-		if (exitedNormally(pStatus))
+	while ((pidPtr = vector_popBack(pidVector)) != NULL) {
+		pStatusPtr = vector_popBack(stateVector);
+		printf("CHILD EXITED (PID=%li; ", (long) *pidPtr);
+		if (exitedNormally(*pStatusPtr))
 			puts("return OK)");
 		else
 			puts("return NOK)");
-		free(pid);
+		free(pidPtr);
+		free(pStatusPtr);
 	}
 	vector_free(pidVector);
+	vector_free(stateVector);
 	puts("END.");
 	return 0;
 }
