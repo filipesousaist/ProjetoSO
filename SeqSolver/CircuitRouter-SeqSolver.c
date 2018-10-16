@@ -179,10 +179,7 @@ int main(int argc, char** argv){
         sprintf(oldFileName, "%s.old", outputFileName);
 
         if (rename(outputFileName, oldFileName) == -1)
-        {
-            printf("output: %s\nold: %s\n", outputFileName, oldFileName);
             perror("rename");
-        }
         free(oldFileName);
     }
 
