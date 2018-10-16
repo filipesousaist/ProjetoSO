@@ -1,0 +1,21 @@
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+run solver_inp/input2.txt
+exit
