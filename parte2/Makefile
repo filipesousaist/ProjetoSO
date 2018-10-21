@@ -1,4 +1,4 @@
-DIRS = SeqSolver SimpleShell
+DIRS = ParSolver SimpleShell
 DIRS_MAKE = $(addprefix make., $(DIRS))
 DIRS_CLEAN = $(addprefix clean., $(DIRS))
 

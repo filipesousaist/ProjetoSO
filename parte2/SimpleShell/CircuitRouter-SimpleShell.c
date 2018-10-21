@@ -10,7 +10,7 @@
 
 #define BUFFERSIZE 200
 #define PID_VECTOR_START 20
-#define SEQ_SOLVER_NAME "CircuitRouter-SeqSolver"
+#define SEQ_SOLVER_NAME "CircuitRouter-ParSolver"
 
 enum {
 	ERR_LINEARGS,
@@ -86,6 +86,8 @@ int main(int argc, char const *argv[]) {
 			else if (pid == 0) { /* child process */
 				char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
 				execv(SEQ_SOLVER_NAME, args);
+				perror("execv");
+				exit(1);
 			}
 			else /* parent process */
 				++ numChildren;

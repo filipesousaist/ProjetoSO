@@ -66,17 +66,19 @@
 #define NUM_CHARS_EXT 4
 
 enum param_types {
-    PARAM_BENDCOST = (unsigned char)'b',
-    PARAM_XCOST    = (unsigned char)'x',
-    PARAM_YCOST    = (unsigned char)'y',
-    PARAM_ZCOST    = (unsigned char)'z',
+    PARAM_BENDCOST   = (unsigned char)'b',
+    PARAM_XCOST      = (unsigned char)'x',
+    PARAM_YCOST      = (unsigned char)'y',
+    PARAM_ZCOST      = (unsigned char)'z',
+    PARAM_MAXTHREADS = (unsigned char)'t'
 };
 
 enum param_defaults {
-    PARAM_DEFAULT_BENDCOST = 1,
-    PARAM_DEFAULT_XCOST    = 1,
-    PARAM_DEFAULT_YCOST    = 1,
-    PARAM_DEFAULT_ZCOST    = 2,
+    PARAM_DEFAULT_BENDCOST   = 1,
+    PARAM_DEFAULT_XCOST      = 1,
+    PARAM_DEFAULT_YCOST      = 1,
+    PARAM_DEFAULT_ZCOST      = 2,
+    PARAM_DEFAULT_MAXTHREADS = -1
 };
 
 char* global_inputFile = NULL;
@@ -94,6 +96,7 @@ static void displayUsage (const char* appName){
     printf("    x <UINT>   [x] movement cost    (%i)\n", PARAM_DEFAULT_XCOST);
     printf("    y <UINT>   [y] movement cost    (%i)\n", PARAM_DEFAULT_YCOST);
     printf("    z <UINT>   [z] movement cost    (%i)\n", PARAM_DEFAULT_ZCOST);
+    printf("    t <UINT>   number of [t]hreads      \n");
     printf("    h          [h]elp message       (false)\n");
     exit(1);
 }
@@ -104,10 +107,11 @@ static void displayUsage (const char* appName){
  * =============================================================================
  */
 static void setDefaultParams (){
-    global_params[PARAM_BENDCOST] = PARAM_DEFAULT_BENDCOST;
-    global_params[PARAM_XCOST]    = PARAM_DEFAULT_XCOST;
-    global_params[PARAM_YCOST]    = PARAM_DEFAULT_YCOST;
-    global_params[PARAM_ZCOST]    = PARAM_DEFAULT_ZCOST;
+    global_params[PARAM_BENDCOST]   = PARAM_DEFAULT_BENDCOST;
+    global_params[PARAM_XCOST]      = PARAM_DEFAULT_XCOST;
+    global_params[PARAM_YCOST]      = PARAM_DEFAULT_YCOST;
+    global_params[PARAM_ZCOST]      = PARAM_DEFAULT_ZCOST;
+    global_params[PARAM_MAXTHREADS] = PARAM_DEFAULT_MAXTHREADS;
 }
 
 
@@ -115,7 +119,7 @@ static void setDefaultParams (){
  * parseArgs
  * =============================================================================
  */
-static char* parseArgs (long argc, char* const argv[]){
+static char* parseArgs (long argc, char* const argv[]) {
     
     long opt;
 
@@ -123,12 +127,13 @@ static char* parseArgs (long argc, char* const argv[]){
 
     setDefaultParams();
 
-    while ((opt = getopt(argc, argv, "hb:x:y:z:")) != -1) {
+    while ((opt = getopt(argc, argv, "hb:x:y:z:t:")) != -1) {
         switch (opt) {
             case 'b':
             case 'x':
             case 'y':
             case 'z':
+            case 't':
                 global_params[(unsigned char)opt] = atol(optarg);
                 break;
             case '?':
@@ -138,9 +143,15 @@ static char* parseArgs (long argc, char* const argv[]){
                 break;
         }
     }
+
     if (opterr) {
         displayUsage(argv[0]);
-        return NULL; 
+        return NULL;
+    }
+
+    if (global_params['t'] <= 0) {
+        puts("Error: please specify a positive integer for MAXTHREADS");
+        exit(1);
     }
 
     return argv[optind];
