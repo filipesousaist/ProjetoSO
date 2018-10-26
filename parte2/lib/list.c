@@ -131,6 +131,7 @@ list_iter_next (list_iter_t* itPtr, list_t* listPtr)
  */
 static list_node_t*
 allocNode (void* dataPtr)
+
 {
     list_node_t* nodePtr = (list_node_t*)malloc(sizeof(list_node_t));
     if (nodePtr == NULL) {
