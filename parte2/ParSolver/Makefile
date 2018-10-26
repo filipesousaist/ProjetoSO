@@ -6,7 +6,7 @@ SOURCES+= ../lib/vector.c ../lib/queue.c ../lib/list.c ../lib/pair.c
 OBJS = $(SOURCES:%.c=%.o)
 CC   = gcc
 CFLAGS =-Wall -std=gnu99 -I../
-LDFLAGS=-lm
+LDFLAGS=-lm -pthread
 TARGET = ../CircuitRouter-ParSolver
 
 all: $(TARGET)

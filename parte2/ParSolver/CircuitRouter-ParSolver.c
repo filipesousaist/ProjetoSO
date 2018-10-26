@@ -154,9 +154,7 @@ static char* parseArgs (long argc, char* const argv[]) {
         exit(1);
     }
 
-    return argv[optind];
- 
-    
+    return argv[optind]; 
 }
 
 
@@ -169,8 +167,7 @@ int main(int argc, char** argv){
      * Initialization
      */
     char* inputFileName = parseArgs(argc, (char** const)argv);
-    if (inputFileName == NULL)
-    {
+    if (inputFileName == NULL) {
         puts("No file name specified");
         exit(1);
     }
@@ -195,8 +192,7 @@ int main(int argc, char** argv){
     }
 
     FILE *inputFilePtr, *outputFilePtr;
-    if ((inputFilePtr = fopen(inputFileName, "r")) == NULL)
-    {
+    if ((inputFilePtr = fopen(inputFileName, "r")) == NULL) {
         printf("Invalid file name: %s\n", inputFileName);
         exit(1);
     } 

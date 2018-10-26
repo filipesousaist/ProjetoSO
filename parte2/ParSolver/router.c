@@ -79,14 +79,15 @@ typedef struct point {
     momentum_t momentum;
 } point_t;
 
-typedef struct pathSolveData {
+typedef struct path_solve_data {
     queue_t* workQueuePtr;
-    queue_t* myExpansionQueuePtr;
     grid_t* gridPtr;
     grid_t* myGridPtr;
     router_t* routerPtr;
+    vector_t* myPathVectorPtr;
+    queue_t* myExpansionQueuePtr;
     long bendCost;
-} pathSolveData_t;
+} path_solve_data_t;
 
 point_t MOVE_POSX = { 1,  0,  0,  0, MOMENTUM_POSX};
 point_t MOVE_POSY = { 0,  1,  0,  0, MOMENTUM_POSY};
@@ -299,6 +300,57 @@ static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* 
 
 
 /* =============================================================================
+ * solvePath
+ * =============================================================================
+ */
+static void solvePath(void* data)
+{
+    /* Obter os conteúdos de 'data' */
+    path_solve_data_t* pathSolveDataPtr = ((path_solve_data_t*) data);
+    queue_t* workQueuePtr        = pathSolveDataPtr->workQueuePtr;
+    grid_t* gridPtr              = pathSolveDataPtr->gridPtr;
+    grid_t* myGridPtr            = pathSolveDataPtr->myGridPtr;
+    router_t* routerPtr          = pathSolveDataPtr->routerPtr;
+    vector_t* myPathVectorPtr    = pathSolveDataPtr->myPathVectorPtr;
+    queue_t* myExpansionQueuePtr = pathSolveDataPtr->myExpansionQueuePtr;
+    long bendCost                = pathSolveDataPtr->bendCost;
+    
+    while (TRUE) {
+        pair_t* coordinatePairPtr;
+        if (queue_isEmpty(workQueuePtr))
+            coordinatePairPtr = NULL; /* já não há mais elementos */
+        else
+            coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
+        if (coordinatePairPtr == NULL)
+            return;
+
+        coordinate_t* srcPtr = coordinatePairPtr->firstPtr;
+        coordinate_t* dstPtr = coordinatePairPtr->secondPtr;
+
+        pair_free(coordinatePairPtr);
+
+        bool_t success = FALSE;
+        vector_t* pointVectorPtr = NULL;
+
+        grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
+        if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr,
+                         srcPtr, dstPtr)) {
+            pointVectorPtr = doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
+            if (pointVectorPtr) {
+                grid_addPath_Ptr(gridPtr, pointVectorPtr);
+                success = TRUE;
+            }
+        }
+
+        if (success) {
+            bool_t status = vector_pushBack(myPathVectorPtr, (void*)pointVectorPtr);
+            assert(status);
+        }
+    }
+}
+
+
+/* =============================================================================
  * router_solve
  * =============================================================================
  */
@@ -307,77 +359,41 @@ void router_solve (void* argPtr){
     router_solve_arg_t* routerArgPtr = (router_solve_arg_t*)argPtr;
     router_t* routerPtr = routerArgPtr->routerPtr;
     maze_t* mazePtr = routerArgPtr->mazePtr;
-    vector_t* myPathVectorPtr = vector_alloc(1);
-    assert(myPathVectorPtr);
 
-    /* alocação de memória para a estrutura de dados */
-    pathSolveData_t* myDataPtr = (pathSolveData_t*) \
-        malloc(sizeof(pathSolveData_t));
+    /* Alocação de memória para a estrutura de dados */
+    path_solve_data_t* pathSolveDataPtr = (path_solve_data_t*) \
+        malloc(sizeof(path_solve_data_t));
 
-    /* inicialização da estrutura de dados */
-    myDataPtr->workQueuePtr = mazePtr->workQueuePtr;
-    myDataPtr->gridPtr = mazePtr->gridPtr;
-    myDataPtr->myGridPtr = grid_alloc(myDataPtr->gridPtr->width, \
-        myDataPtr->gridPtr->height, myDataPtr->gridPtr->depth);
-    assert(myDataPtr->myGridPtr);
-    myDataPtr->bendCost = routerPtr->bendCost;
-    myDataPtr->myExpansionQueuePtr = queue_alloc(-1);
+    /* Inicialização da estrutura de dados */
+    pathSolveDataPtr->workQueuePtr        = mazePtr->workQueuePtr;
+    pathSolveDataPtr->gridPtr             = mazePtr->gridPtr;
+    pathSolveDataPtr->myGridPtr           = grid_alloc(mazePtr->gridPtr->width, \
+        mazePtr->gridPtr->height, mazePtr->gridPtr->depth);
+    assert(pathSolveDataPtr->myGridPtr);
+    pathSolveDataPtr->myPathVectorPtr     = vector_alloc(1);
+    assert(pathSolveDataPtr->myPathVectorPtr);
+    pathSolveDataPtr->myExpansionQueuePtr = queue_alloc(-1);
+    assert(pathSolveDataPtr->myExpansionQueuePtr);
+    pathSolveDataPtr->bendCost            = routerPtr->bendCost;
 
     /*
      * Iterate over work list to route each path. This involves an
      * 'expansion' and 'traceback' phase for each source/destination pair.
      */
-    while (1) {
-        /* TODO: criar tarefas com pthread create */
-    }
+    
+    /* TODO: criar tarefas com pthread create */
+    solvePath(pathSolveDataPtr);
 
     /*
      * Add my paths to global list
      */
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
-    list_insert(pathVectorListPtr, (void*)myPathVectorPtr);
+    list_insert(pathVectorListPtr, (void*)pathSolveDataPtr->myPathVectorPtr);
 
-    grid_free(myGridPtr);
-    queue_free(myExpansionQueuePtr);
-}
-
-static void* solvePath(void *data)
-{
-    /* TODO: adaptar função para utilizar as
-    variáveis contidas na estrutura 'data' */
-    pair_t* coordinatePairPtr;
-    if (queue_isEmpty(workQueuePtr)) {
-        coordinatePairPtr = NULL;
-    } else {
-        coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
-    }
-    if (coordinatePairPtr == NULL) {
-        break;
-    }
-
-    coordinate_t* srcPtr = coordinatePairPtr->firstPtr;
-    coordinate_t* dstPtr = coordinatePairPtr->secondPtr;
-
-    pair_free(coordinatePairPtr);
-
-    bool_t success = FALSE;
-    vector_t* pointVectorPtr = NULL;
-
-    grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
-    if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr,
-                     srcPtr, dstPtr)) {
-        pointVectorPtr = doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
-        if (pointVectorPtr) {
-            grid_addPath_Ptr(gridPtr, pointVectorPtr);
-
-            success = TRUE;
-        }
-    }
-
-    if (success) {
-        bool_t status = vector_pushBack(myPathVectorPtr,(void*)pointVectorPtr);
-        assert(status);
-    }
+    /* Libertar memória */
+    grid_free(pathSolveDataPtr->myGridPtr);
+    queue_free(pathSolveDataPtr->myExpansionQueuePtr);
+    free(pathSolveDataPtr);
 }
 
 /* =============================================================================
