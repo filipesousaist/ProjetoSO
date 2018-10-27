@@ -70,7 +70,7 @@ enum param_types {
     PARAM_XCOST      = (unsigned char)'x',
     PARAM_YCOST      = (unsigned char)'y',
     PARAM_ZCOST      = (unsigned char)'z',
-    PARAM_MAXTHREADS = (unsigned char)'t'
+    PARAM_NUMTHREADS = (unsigned char)'t'
 };
 
 enum param_defaults {
@@ -78,7 +78,7 @@ enum param_defaults {
     PARAM_DEFAULT_XCOST      = 1,
     PARAM_DEFAULT_YCOST      = 1,
     PARAM_DEFAULT_ZCOST      = 2,
-    PARAM_DEFAULT_MAXTHREADS = -1
+    PARAM_DEFAULT_NUMTHREADS = -1
 };
 
 char* global_inputFile = NULL;
@@ -96,7 +96,7 @@ static void displayUsage (const char* appName){
     printf("    x <UINT>   [x] movement cost    (%i)\n", PARAM_DEFAULT_XCOST);
     printf("    y <UINT>   [y] movement cost    (%i)\n", PARAM_DEFAULT_YCOST);
     printf("    z <UINT>   [z] movement cost    (%i)\n", PARAM_DEFAULT_ZCOST);
-    printf("    t <UINT>   number of [t]hreads      \n");
+    printf("    t <UINT>   number of [t]hreads  (required)\n");
     printf("    h          [h]elp message       (false)\n");
     exit(1);
 }
@@ -111,7 +111,7 @@ static void setDefaultParams (){
     global_params[PARAM_XCOST]      = PARAM_DEFAULT_XCOST;
     global_params[PARAM_YCOST]      = PARAM_DEFAULT_YCOST;
     global_params[PARAM_ZCOST]      = PARAM_DEFAULT_ZCOST;
-    global_params[PARAM_MAXTHREADS] = PARAM_DEFAULT_MAXTHREADS;
+    global_params[PARAM_NUMTHREADS] = PARAM_DEFAULT_NUMTHREADS;
 }
 
 
@@ -144,14 +144,8 @@ static char* parseArgs (long argc, char* const argv[]) {
         }
     }
 
-    if (opterr) {
+    if (opterr || global_params['t'] <= 0) {
         displayUsage(argv[0]);
-        return NULL;
-    }
-
-    if (global_params['t'] <= 0) {
-        puts("Error: please specify a positive integer for MAXTHREADS");
-        exit(1);
     }
 
     return argv[optind]; 
@@ -168,7 +162,7 @@ int main(int argc, char** argv){
      */
     char* inputFileName = parseArgs(argc, (char** const)argv);
     if (inputFileName == NULL) {
-        puts("No file name specified");
+        fputs("No file name specified\n", stderr);
         exit(1);
     }
     maze_t* mazePtr = maze_alloc();
@@ -193,7 +187,7 @@ int main(int argc, char** argv){
 
     FILE *inputFilePtr, *outputFilePtr;
     if ((inputFilePtr = fopen(inputFileName, "r")) == NULL) {
-        printf("Invalid file name: %s\n", inputFileName);
+        fprintf(stderr, "Invalid file name: %s\n", inputFileName);
         exit(1);
     } 
     outputFilePtr = fopen(outputFileName, "w");
@@ -209,7 +203,8 @@ int main(int argc, char** argv){
     list_t* pathVectorListPtr = list_alloc(NULL);
     assert(pathVectorListPtr);
 
-    router_solve_arg_t routerArg = {routerPtr, mazePtr, pathVectorListPtr};
+    router_solve_arg_t routerArg = {routerPtr, mazePtr, pathVectorListPtr,
+        global_params[PARAM_NUMTHREADS]};
     TIMER_T startTime;
     TIMER_READ(startTime);
 

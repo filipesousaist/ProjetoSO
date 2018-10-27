@@ -57,6 +57,8 @@
 
 #include "grid.h"
 #include "maze.h"
+#include "lib/queue.h"
+#include "lib/list.h"
 #include "lib/vector.h"
 
 typedef struct router {
@@ -70,7 +72,18 @@ typedef struct router_solve_arg {
     router_t* routerPtr;
     maze_t* mazePtr;
     list_t* pathVectorListPtr;
+    long numThreads;
 } router_solve_arg_t;
+
+typedef struct path_solve_data {
+    queue_t* workQueuePtr;
+    grid_t* gridPtr;
+    grid_t* myGridPtr;
+    router_t* routerPtr;
+    vector_t* myPathVectorPtr;
+    queue_t* myExpansionQueuePtr;
+    long bendCost;
+} path_solve_data_t;
 
 
 /* =============================================================================

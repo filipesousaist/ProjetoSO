@@ -53,11 +53,11 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <pthread.h>
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/queue.h"
 #include "router.h"
+#include "thread.h"
 #include "lib/vector.h"
 
 
@@ -78,16 +78,6 @@ typedef struct point {
     long value;
     momentum_t momentum;
 } point_t;
-
-typedef struct path_solve_data {
-    queue_t* workQueuePtr;
-    grid_t* gridPtr;
-    grid_t* myGridPtr;
-    router_t* routerPtr;
-    vector_t* myPathVectorPtr;
-    queue_t* myExpansionQueuePtr;
-    long bendCost;
-} path_solve_data_t;
 
 point_t MOVE_POSX = { 1,  0,  0,  0, MOMENTUM_POSX};
 point_t MOVE_POSY = { 0,  1,  0,  0, MOMENTUM_POSY};
@@ -303,7 +293,7 @@ static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* 
  * solvePath
  * =============================================================================
  */
-static void solvePath(void* data)
+static void* solvePath(void* data)
 {
     /* Obter os conteúdos de 'data' */
     path_solve_data_t* pathSolveDataPtr = ((path_solve_data_t*) data);
@@ -322,7 +312,7 @@ static void solvePath(void* data)
         else
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
         if (coordinatePairPtr == NULL)
-            return;
+            break;
 
         coordinate_t* srcPtr = coordinatePairPtr->firstPtr;
         coordinate_t* dstPtr = coordinatePairPtr->secondPtr;
@@ -347,6 +337,7 @@ static void solvePath(void* data)
             assert(status);
         }
     }
+    return NULL; /* a função retorna sempre NULL */
 }
 
 
@@ -356,44 +347,72 @@ static void solvePath(void* data)
  */
 void router_solve (void* argPtr){
 
+    int i;
+
     router_solve_arg_t* routerArgPtr = (router_solve_arg_t*)argPtr;
     router_t* routerPtr = routerArgPtr->routerPtr;
     maze_t* mazePtr = routerArgPtr->mazePtr;
-
-    /* Alocação de memória para a estrutura de dados */
-    path_solve_data_t* pathSolveDataPtr = (path_solve_data_t*) \
-        malloc(sizeof(path_solve_data_t));
-
-    /* Inicialização da estrutura de dados */
-    pathSolveDataPtr->workQueuePtr        = mazePtr->workQueuePtr;
-    pathSolveDataPtr->gridPtr             = mazePtr->gridPtr;
-    pathSolveDataPtr->myGridPtr           = grid_alloc(mazePtr->gridPtr->width, \
+    grid_t* myGridPtr = grid_alloc(mazePtr->gridPtr->width, \
         mazePtr->gridPtr->height, mazePtr->gridPtr->depth);
-    assert(pathSolveDataPtr->myGridPtr);
-    pathSolveDataPtr->myPathVectorPtr     = vector_alloc(1);
-    assert(pathSolveDataPtr->myPathVectorPtr);
-    pathSolveDataPtr->myExpansionQueuePtr = queue_alloc(-1);
-    assert(pathSolveDataPtr->myExpansionQueuePtr);
-    pathSolveDataPtr->bendCost            = routerPtr->bendCost;
+    assert(myGridPtr);
+    vector_t* myPathVectorPtr = vector_alloc(1);
+    assert(myPathVectorPtr);
+    queue_t* myExpansionQueuePtr = queue_alloc(-1);
+    assert(myExpansionQueuePtr);
+
+    /* Criação da estrutura de dados */
+    path_solve_data_t pathSolveData = {
+        mazePtr->workQueuePtr,
+        mazePtr->gridPtr,
+        myGridPtr,
+        routerPtr,
+        myPathVectorPtr,
+        myExpansionQueuePtr,
+        routerPtr->bendCost 
+    };
 
     /*
      * Iterate over work list to route each path. This involves an
      * 'expansion' and 'traceback' phase for each source/destination pair.
      */
+    queue_t* threadsQueuePtr = queue_alloc(routerArgPtr->numThreads);
+    assert(threadsQueuePtr);
+    thread_t* threadPtr;
     
-    /* TODO: criar tarefas com pthread create */
-    solvePath(pathSolveDataPtr);
+    for (i = 0; i < routerArgPtr->numThreads; ++ i) /* Criar as tarefas */
+    {
+        threadPtr = thread_alloc();
+        assert(threadPtr);
+        queue_push(threadsQueuePtr, (void *) threadPtr);
+        thread_exec(threadPtr, solvePath, (void*) &pathSolveData);
+        if (threadPtr->errorCode != THREAD_OK)
+        {
+            thread_displayError(threadPtr);
+            exit(1);
+        }
+    }
+
+    while (! queue_isEmpty(threadsQueuePtr)) /* Esperar que todas as */
+    {                                        /* tarefas terminem     */
+        threadPtr = (thread_t *) queue_pop(threadsQueuePtr);
+        thread_wait(threadPtr);
+        if (threadPtr->errorCode != THREAD_OK)
+        {
+            thread_displayError(threadPtr);
+            exit(1);
+        }
+    }
 
     /*
      * Add my paths to global list
      */
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
-    list_insert(pathVectorListPtr, (void*)pathSolveDataPtr->myPathVectorPtr);
+    list_insert(pathVectorListPtr, (void*)myPathVectorPtr);
 
     /* Libertar memória */
-    grid_free(pathSolveDataPtr->myGridPtr);
-    queue_free(pathSolveDataPtr->myExpansionQueuePtr);
-    free(pathSolveDataPtr);
+    grid_free(myGridPtr);
+    queue_free(myExpansionQueuePtr);
+    queue_free(threadsQueuePtr);
 }
 
 /* =============================================================================
