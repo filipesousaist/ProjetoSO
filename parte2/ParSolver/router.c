@@ -368,7 +368,7 @@ void router_solve (void* argPtr){
         routerPtr,
         myPathVectorPtr,
         myExpansionQueuePtr,
-        routerPtr->bendCost 
+        routerPtr->bendCost
     };
 
     /*
