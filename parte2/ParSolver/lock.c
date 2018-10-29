@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "lock.h"
 
 lock_t* lock_alloc()
@@ -17,11 +18,15 @@ lock_t* lock_alloc()
 
 void lock_init(lock_t* lockPtr)
 {
-	if (lockPtr->status != LOCK_ALLOC ||
-		pthread_mutex_init(lockPtr->queueLockPtr, NULL) != 0)
-		lockPtr->errorCode = LOCK_ERR_INIT;
-	else
+	closeStatus(lockPtr);
+
+	if (lockPtr->status == LOCK_ALLOC && \
+		pthread_mutex_init(lockPtr->queueLockPtr, NULL) == 0) {
 		lockPtr->status = LOCK_OPEN;
+		openStatus(lockPtr);
+	}
+	else
+		lockPtr->errorCode = LOCK_ERR_INIT;
 }
 
 /* =============================================================================
@@ -30,17 +35,23 @@ void lock_init(lock_t* lockPtr)
  *   Fecha o trinco se estiver aberto, ou espera que o trinco abra se estiver
  * fechado.
  */
-void lock_close(lock_t* lockPtr)
-{
-	if (lockPtr->status == LOCK_ALLOC || \
-		pthread_mutex_lock(lockPtr->mutexPtr) != 0)
-		lockPtr->errorCode = LOCK_ERR_CLOSE;
-	
-	else {
-		
-		lockPtr->status = LOCK_CLOSED;
-		pthread_mutex_unlock(lockPtr->statusMutexPtr);
+void lock_close(lock_t* lockPtr){
+	closeStatus(lockPtr);
+
+	if (lockPtr->status != LOCK_ALLOC) {
+		openStatus(lockPtr);
+
+		if (pthread_mutex_unlock(lockPtr->mutexPtr) == 0) {
+			closeStatus(lockPtr);
+			lockPtr->status = LOCK_CLOSED;
+			pthread_mutex_unlock(lockPtr);
+			openStatus(lockPtr);
+		}
+		else
+			closeStatus(lockPtr);
 	}
+	else
+		lockPtr->status = LOCK_ERR_CLOSE;
 }
 
 /* =============================================================================
@@ -49,35 +60,98 @@ void lock_close(lock_t* lockPtr)
  *   Abre o trinco sse estiver fechado.
  */
 void lock_open(lock_t* lockPtr) {
-	pthread_mutex_lock(lockPtr->statusMutexPtr);
-	if (lockPtr->status != LOCK_CLOSED \
-		pthread_mutex_unlock(lockPtr->mutexPtr) != 0)
-		lockPtr->errorCode = LOCK_ERR_OPEN;
-	else
+	closeStatus(lockPtr);
+
+	if (lockPtr->status == LOCK_CLOSED && \
+		pthread_mutex_unlock(lockPtr->mutexPtr) == 0) {
 		lockPtr->status = LOCK_OPEN;
-	pthread_mutex_unlock(lockPtr->statusMutexPtr);
+		openStatus(lockPtr);
+	}
+	else
+		lockPtr->errorCode = LOCK_ERR_OPEN;
 }
 
-void lock_free(lock_t* lockPtr)
-{
-	pthread_mutex_lock(lockPtr->statusMutexPtr);
+/* =============================================================================
+ * lock_open
+ * =============================================================================
+ *   Liberta a memória associada ao trinco, mas este deve estar aberto.
+ */
+void lock_free(lock_t* lockPtr) {
+	closeStatus(lockPtr);
+
 	if (lockPtr->status != LOCK_CLOSED) {
-		pthread_mutex_unlock(lockPtr->statusMutexPtr);
 		pthread_mutex_destroy(lockPtr->mutexPtr);
+		pthread_mutex_destroy(lockPtr->statusMutexPtr);
 		free(lockPtr->mutexPtr);
+		free(lockPtr->statusMutexPtr);
 		free(lockPtr);
 	}
-	else {
-		pthread_mutex_unlock(lockPtr->statusMutexPtr);
-		lockPtr->errorCode = ERR_DESTROY;
-	}
-
+	else
+		lockPtr->errorCode = LOCK_ERR_DESTROY;
+		
 }
 
 int lock_getStatus(lock_t* lockPtr)
 {
-	pthread_mutex_lock(lockPtr->statusMutexPtr);
-	int status = lockPtr->status;
-	pthread_mutex_unlock(lockPtr->statusMutexPtr);
-	return status;
+	closeStatus(lockPtr);
+	return lockPtr->status;
+}
+
+
+static void closeStatus(lock_t* lockPtr) {
+	if (pthread_mutex_lock(lockPtr->statusMutexPtr) != 0)
+	{
+		fputs("<statusMutexPtr>\n", stderr);
+		perror("pthread_mutex_lock");
+		exit(0);
+	}
+}
+
+static void openStatus(lock_t* lockPtr) {
+	if (pthread_mutex_unlock(lockPtr->statusMutexPtr) != 0)
+	{
+		fputs("<statusMutexPtr>\n", stderr);
+		perror("pthread_mutex_unlock");
+		exit(0);
+	}
+}
+
+void lock_displayError(lock_t* lockPtr) {
+	switch (lockPtr->errorCode) {
+		case LOCK_ERR_INIT:
+			switch (lockPtr->status) {
+				case LOCK_OPEN:
+					fputs("Error: Tried to init open lock.\n", stderr); break;
+				case LOCK_CLOSED:
+					fputs("Error: Tried to init closed lock.\n", stderr); break;
+				default:
+					perror("pthread_mutex_init");
+			} break;
+		case LOCK_ERR_CLOSE:
+			switch (lockPtr->status) {
+				case LOCK_ALLOC:
+					fputs("Error: Tried to close uninitialized lock.\n", \
+						stderr); break;
+				default:
+					perror("pthread_mutex_unlock");
+			} break;
+		case LOCK_ERR_OPEN:
+			switch (lockPtr->status) {
+				case LOCK_ALLOC:
+					fputs("Error: Tried to open uninitialized lock.\n", \
+						stderr); break;
+				case LOCK_OPEN:
+					fputs("Error: Tried to open open lock.\n", stderr); break;
+				default:
+					perror("pthread_mutex_open");
+			} break;
+		case LOCK_ERR_DESTROY:
+			switch (lockPtr->status) {
+				case LOCK_CLOSE:
+					fputs("Error: Tried to destroy closed lock.\n", \
+						stderr); break;
+				default:
+					perror("pthread_mutex_destroy");
+			} break;
+	}
 }
