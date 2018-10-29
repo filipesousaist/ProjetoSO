@@ -16,7 +16,7 @@ enum { /* código de erro dos trincos */
 
 typedef struct lock {
 	pthread_mutex_t* mutexPtr;
-	pthread_mutex_t* mutexLockPtr;
+	pthread_mutex_t* statusMutexPtr;
 	int status;
 	int errorCode;
 } lock_t;
