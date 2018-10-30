@@ -298,27 +298,32 @@ static void* solvePath(void* data)
 {
     /* Obter os conteúdos de 'data' */
     path_solve_data_t* pathSolveDataPtr = ((path_solve_data_t*) data);
-    queue_t* workQueuePtr        = pathSolveDataPtr->workQueuePtr;
-    grid_t* gridPtr              = pathSolveDataPtr->gridPtr;
-    grid_t* myGridPtr            = pathSolveDataPtr->myGridPtr;
-    router_t* routerPtr          = pathSolveDataPtr->routerPtr;
-    vector_t* myPathVectorPtr    = pathSolveDataPtr->myPathVectorPtr;
-    queue_t* myExpansionQueuePtr = pathSolveDataPtr->myExpansionQueuePtr;
-    lock_t* queueLockPtr         = pathSolveDataPtr->queueLockPtr;
-    lock_t* gridLockPtr            = pathSolveDataPtr->gridLockPtr;
-    long bendCost                = pathSolveDataPtr->bendCost;
+    queue_t* workQueuePtr         = pathSolveDataPtr->workQueuePtr;
+    grid_t* gridPtr               = pathSolveDataPtr->gridPtr;
+    grid_t* myGridPtr             = pathSolveDataPtr->myGridPtr;
+    router_t* routerPtr           = pathSolveDataPtr->routerPtr;
+    vector_t* myPathVectorPtr     = pathSolveDataPtr->myPathVectorPtr;
+    queue_t* myExpansionQueuePtr  = pathSolveDataPtr->myExpansionQueuePtr;
+    pthread_mutex_t* queueLockPtr = pathSolveDataPtr->queueLockPtr;
+    pthread_mutex_t* gridLockPtr  = pathSolveDataPtr->gridLockPtr;
+    long bendCost                 = pathSolveDataPtr->bendCost;
     
     while (TRUE) {
         pair_t* coordinatePairPtr;
 
-        lock_close(queueLockPtr);
-        lock_checkError(queueLockPtr);
+        /*seccao critica da pilha abaixo*/
+        if (pthread_mutex_lock(queueLockPtr) != 0) {
+            perror("pthread_mutex_lock");
+            exit (1);
+        }
         if (queue_isEmpty(workQueuePtr))
             coordinatePairPtr = NULL; /* já não há mais elementos */
         else
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
-        lock_open(queueLockPtr);
-        lock_checkError(queueLockPtr);
+        if (pthread_mutex_unlock(queueLockPtr) != 0) {
+            perror("pthread_mutex_unlock");
+            exit (1);
+        }
 
         if (coordinatePairPtr == NULL)
             break;
@@ -331,8 +336,11 @@ static void* solvePath(void* data)
         bool_t success = FALSE;
         vector_t* pointVectorPtr = NULL;
 
-        lock_close(gridLockPtr);
-        lock_checkError(gridLockPtr);
+        /*seccao critica da grid abaixo*/
+        if (pthread_mutex_lock(gridLockPtr) != 0) {
+            perror("pthread_mutex_lock");
+            exit (1);
+        }
         grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
         if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr, \
                          srcPtr, dstPtr)) {
@@ -342,8 +350,10 @@ static void* solvePath(void* data)
                 success = TRUE;
             }
         }
-        lock_open(gridLockPtr);
-        lock_checkError(gridLockPtr);
+        if (pthread_mutex_unlock(gridLockPtr) != 0) {
+            perror("pthread_mutex_unlock");
+            exit (1);
+        }
 
 
         if (success) {
@@ -375,15 +385,19 @@ void router_solve (void* argPtr){
     assert(myExpansionQueuePtr);
 
     /* Criação dos trincos */
-    lock_t* queueLockPtr = lock_alloc();
+    pthread_mutex_t* queueLockPtr = \
+    (pthread_mutex_t*) malloc (sizeof(pthread_mutex_t));
     assert(queueLockPtr);
-    lock_init(queueLockPtr);
-    checkError(queueLockPtr);
-
-    lock_t* gridLockPtr = lock_alloc();
+    pthread_mutex_t* gridLockPtr =  \
+    (pthread_mutex_t*) malloc (sizeof(pthread_mutex_t));
     assert(gridLockPtr);
-    lock_init(gridLockPtr);
-    checkError(gridLockPtr);
+
+    if (pthread_mutex_init(queueLockPtr, NULL) != 0 || \
+        pthread_mutex_init(gridLockPtr, NULL) != 0){
+        perror("pthread_mutex_init");
+        exit(1);
+    }
+    
 
     /* Criação da estrutura de dados */
     path_solve_data_t pathSolveData = {
@@ -436,7 +450,13 @@ void router_solve (void* argPtr){
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
     list_insert(pathVectorListPtr, (void*)myPathVectorPtr);
 
-    /* Libertar memória */
+    /* Libertar memória e destruir trincos */
+
+    if (pthread_mutex_destroy(queueLockPtr) != 0 || \
+        pthread_mutex_destroy(gridLockPtr) != 0){
+        perror("pthread_mutex_destroy");
+        exit(1);
+    }    
     grid_free(myGridPtr);
     queue_free(myExpansionQueuePtr);
     queue_free(threadsQueuePtr);
