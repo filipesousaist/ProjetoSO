@@ -56,7 +56,6 @@
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/queue.h"
-#include "lock.h"
 #include "router.h"
 #include "thread.h"
 #include "lib/vector.h"
