@@ -56,6 +56,7 @@
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/queue.h"
+#include "lock.h"
 #include "router.h"
 #include "thread.h"
 #include "lib/vector.h"
@@ -303,14 +304,22 @@ static void* solvePath(void* data)
     router_t* routerPtr          = pathSolveDataPtr->routerPtr;
     vector_t* myPathVectorPtr    = pathSolveDataPtr->myPathVectorPtr;
     queue_t* myExpansionQueuePtr = pathSolveDataPtr->myExpansionQueuePtr;
+    lock_t* queueLockPtr         = pathSolveDataPtr->queueLockPtr;
+    lock_t* gridLockPtr            = pathSolveDataPtr->gridLockPtr;
     long bendCost                = pathSolveDataPtr->bendCost;
     
     while (TRUE) {
         pair_t* coordinatePairPtr;
+
+        lock_close(queueLockPtr);
+        lock_checkError(queueLockPtr);
         if (queue_isEmpty(workQueuePtr))
             coordinatePairPtr = NULL; /* já não há mais elementos */
         else
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
+        lock_open(queueLockPtr);
+        lock_checkError(queueLockPtr);
+
         if (coordinatePairPtr == NULL)
             break;
 
@@ -322,8 +331,10 @@ static void* solvePath(void* data)
         bool_t success = FALSE;
         vector_t* pointVectorPtr = NULL;
 
+        lock_close(gridLockPtr);
+        lock_checkError(gridLockPtr);
         grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
-        if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr,
+        if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr, \
                          srcPtr, dstPtr)) {
             pointVectorPtr = doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
             if (pointVectorPtr) {
@@ -331,6 +342,9 @@ static void* solvePath(void* data)
                 success = TRUE;
             }
         }
+        lock_open(gridLockPtr);
+        lock_checkError(gridLockPtr);
+
 
         if (success) {
             bool_t status = vector_pushBack(myPathVectorPtr, (void*)pointVectorPtr);
@@ -360,6 +374,17 @@ void router_solve (void* argPtr){
     queue_t* myExpansionQueuePtr = queue_alloc(-1);
     assert(myExpansionQueuePtr);
 
+    /* Criação dos trincos */
+    lock_t* queueLockPtr = lock_alloc();
+    assert(queueLockPtr);
+    lock_init(queueLockPtr);
+    checkError(queueLockPtr);
+
+    lock_t* gridLockPtr = lock_alloc();
+    assert(gridLockPtr);
+    lock_init(gridLockPtr);
+    checkError(gridLockPtr);
+
     /* Criação da estrutura de dados */
     path_solve_data_t pathSolveData = {
         mazePtr->workQueuePtr,
@@ -368,6 +393,8 @@ void router_solve (void* argPtr){
         routerPtr,
         myPathVectorPtr,
         myExpansionQueuePtr,
+        queueLockPtr,
+        gridLockPtr,
         routerPtr->bendCost
     };
 

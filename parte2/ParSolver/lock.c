@@ -41,17 +41,18 @@ void lock_close(lock_t* lockPtr){
 	if (lockPtr->status != LOCK_ALLOC) {
 		openStatus(lockPtr);
 
-		if (pthread_mutex_unlock(lockPtr->mutexPtr) == 0) {
+		if (pthread_mutex_lock(lockPtr->mutexPtr) == 0) {
 			closeStatus(lockPtr);
 			lockPtr->status = LOCK_CLOSED;
-			pthread_mutex_unlock(lockPtr);
 			openStatus(lockPtr);
 		}
-		else
+		else {
 			closeStatus(lockPtr);
+			lockPtr->errorCode = LOCK_ERR_CLOSE;
+		}
 	}
 	else
-		lockPtr->status = LOCK_ERR_CLOSE;
+		lockPtr->errorCode = LOCK_ERR_CLOSE;
 }
 
 /* =============================================================================
@@ -72,9 +73,9 @@ void lock_open(lock_t* lockPtr) {
 }
 
 /* =============================================================================
- * lock_open
+ * lock_free
  * =============================================================================
- *   Liberta a memória associada ao trinco, mas este deve estar aberto.
+ *   Liberta a memória associada ao trinco, mas este tem de estar aberto.
  */
 void lock_free(lock_t* lockPtr) {
 	closeStatus(lockPtr);
@@ -91,9 +92,13 @@ void lock_free(lock_t* lockPtr) {
 		
 }
 
+/* =============================================================================
+ * lock_getStatus
+ * =============================================================================
+ *   (DEBUGGING) Obtém o estado do lock. O mutex da status tem de estar fechado.
+ */
 int lock_getStatus(lock_t* lockPtr)
 {
-	closeStatus(lockPtr);
 	return lockPtr->status;
 }
 
@@ -103,17 +108,35 @@ static void closeStatus(lock_t* lockPtr) {
 	{
 		fputs("<statusMutexPtr>\n", stderr);
 		perror("pthread_mutex_lock");
-		exit(0);
+		exit(1);
+	}
+}
+
+static void tryCloseStatus(lock_t* lockPtr) {
+	if (pthread_mutex_trylock(lockPtr->statusMutexPtr) != 0 && errno != EBUSY)
+	{
+		fputs("<statusMutexPtr>\n", stderr);
+		perror("pthread_mutex_trylock");
+		exit(1);
 	}
 }
 
 static void openStatus(lock_t* lockPtr) {
-	if (pthread_mutex_unlock(lockPtr->statusMutexPtr) != 0)
+	if (pthread_mutex_unlock(lockPtr->statusMutexPtr))
 	{
 		fputs("<statusMutexPtr>\n", stderr);
 		perror("pthread_mutex_unlock");
-		exit(0);
+		exit(1);
 	}
+}
+
+void lock_checkError(lock_t* lockPtr){
+	tryCloseStatus(lockPtr);
+	if (lockPtr->errorCode != LOCK_OK) {
+		lock_displayError(lockPtr);
+		exit(1);
+	}
+	openStatus(lockPtr);
 }
 
 void lock_displayError(lock_t* lockPtr) {

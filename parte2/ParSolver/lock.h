@@ -1,3 +1,6 @@
+#ifndef LOCK_H
+#define LOCK_H
+
 #include <pthread.h>
 
 
@@ -20,3 +23,5 @@ typedef struct lock {
 	pthread_mutex_t* statusMutexPtr;
 	int status;
 } lock_t;
+
+#endif

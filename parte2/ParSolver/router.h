@@ -59,6 +59,7 @@
 #include "maze.h"
 #include "lib/queue.h"
 #include "lib/list.h"
+#include "lock.h"
 #include "lib/vector.h"
 
 typedef struct router {
@@ -82,6 +83,8 @@ typedef struct path_solve_data {
     router_t* routerPtr;
     vector_t* myPathVectorPtr;
     queue_t* myExpansionQueuePtr;
+    lock_t* queueLockPtr;
+    lock_t* gridLockPtr;
     long bendCost;
 } path_solve_data_t;
 
