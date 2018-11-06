@@ -78,12 +78,10 @@ typedef struct router_solve_arg {
 typedef struct path_solve_data {
     queue_t* workQueuePtr;
     grid_t* gridPtr;
-    grid_t* myGridPtr;
     router_t* routerPtr;
-    vector_t* myPathVectorPtr;
-    queue_t* myExpansionQueuePtr;
     pthread_mutex_t* queueLockPtr;
     pthread_mutex_t* gridLockPtr;
+    pthread_mutex_t* coordinateLocksVectorPtr;
     long bendCost;
 } path_solve_data_t;
 

@@ -299,14 +299,20 @@ static void* solvePath(void* data)
     path_solve_data_t* pathSolveDataPtr = ((path_solve_data_t*) data);
     queue_t* workQueuePtr         = pathSolveDataPtr->workQueuePtr;
     grid_t* gridPtr               = pathSolveDataPtr->gridPtr;
-    grid_t* myGridPtr             = pathSolveDataPtr->myGridPtr;
     router_t* routerPtr           = pathSolveDataPtr->routerPtr;
-    vector_t* myPathVectorPtr     = pathSolveDataPtr->myPathVectorPtr;
-    queue_t* myExpansionQueuePtr  = pathSolveDataPtr->myExpansionQueuePtr;
     pthread_mutex_t* queueLockPtr = pathSolveDataPtr->queueLockPtr;
     pthread_mutex_t* gridLockPtr  = pathSolveDataPtr->gridLockPtr;
     long bendCost                 = pathSolveDataPtr->bendCost;
     
+    grid_t* myGridPtr = grid_alloc(mazePtr->gridPtr->width, \
+        mazePtr->gridPtr->height, mazePtr->gridPtr->depth);
+    assert(myGridPtr);
+    queue_t* myExpansionQueuePtr = queue_alloc(-1);
+    assert(myExpansionQueuePtr);
+    /* Vetor que guarda todos os caminhos que esta tarefa resolver */
+    vector_t* myPathVectorPtr = vector_alloc(1);
+    assert(myPathVectorPtr);
+
     while (TRUE) {
         pair_t* coordinatePairPtr;
 
@@ -332,34 +338,44 @@ static void* solvePath(void* data)
 
         pair_free(coordinatePairPtr);
 
-        bool_t success = FALSE;
+        bool_t tracebackSuccess = FALSE;
+        bool_t addPathSuccess = FALSE;
         vector_t* pointVectorPtr = NULL;
 
-        /*seccao critica da grid abaixo*/
+        /* secção critica da grid abaixo */
         if (pthread_mutex_lock(gridLockPtr) != 0) {
             perror("pthread_mutex_lock");
-            exit (1);
-        }
-        grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
-        if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr, \
-                         srcPtr, dstPtr)) {
-            pointVectorPtr = doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
-            if (pointVectorPtr) {
-                grid_addPath_Ptr(gridPtr, pointVectorPtr);
-                success = TRUE;
+            exit(1);
+        }     
+        while (! addPathSuccess) {
+            tracebackSuccess = FALSE;
+            grid_copy(myGridPtr, gridPtr); /* create a copy of the grid, over which the expansion and trace back phases will be executed. */
+            if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr, \
+                             srcPtr, dstPtr)) {
+                pointVectorPtr = doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
+                if (pointVectorPtr) {
+                    tracebackSuccess = TRUE;
+                    addPathSuccess = grid_addPath_Ptr(gridPtr, pointVectorPtr);
+                }
             }
+            if (! tracebackSuccess) /* traceback failed, don't try again */
+                break;
         }
         if (pthread_mutex_unlock(gridLockPtr) != 0) {
             perror("pthread_mutex_unlock");
             exit (1);
         }
+        /* fim da secção critica da grid */
 
-
-        if (success) {
+        if (tracebackSuccess) {
             bool_t status = vector_pushBack(myPathVectorPtr, (void*)pointVectorPtr);
             assert(status);
         }
     }
+
+    grid_free(myGridPtr);
+    queue_free(myExpansionQueuePtr);
+
     return NULL; /* a função retorna sempre NULL */
 }
 
@@ -368,28 +384,23 @@ static void* solvePath(void* data)
  * router_solve
  * =============================================================================
  */
-void router_solve (void* argPtr){
+void router_solve (void* argPtr) {
 
     int i;
 
     router_solve_arg_t* routerArgPtr = (router_solve_arg_t*)argPtr;
     router_t* routerPtr = routerArgPtr->routerPtr;
     maze_t* mazePtr = routerArgPtr->mazePtr;
-    grid_t* myGridPtr = grid_alloc(mazePtr->gridPtr->width, \
-        mazePtr->gridPtr->height, mazePtr->gridPtr->depth);
-    assert(myGridPtr);
-    vector_t* myPathVectorPtr = vector_alloc(1);
-    assert(myPathVectorPtr);
-    queue_t* myExpansionQueuePtr = queue_alloc(-1);
-    assert(myExpansionQueuePtr);
 
     /* Criação dos trincos */
     pthread_mutex_t* queueLockPtr = \
-    (pthread_mutex_t*) malloc (sizeof(pthread_mutex_t));
+    (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
     assert(queueLockPtr);
-    pthread_mutex_t* gridLockPtr =  \
-    (pthread_mutex_t*) malloc (sizeof(pthread_mutex_t));
+    pthread_mutex_t* gridLockPtr = \
+    (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
     assert(gridLockPtr);
+
+
 
     if (pthread_mutex_init(queueLockPtr, NULL) != 0 || \
         pthread_mutex_init(gridLockPtr, NULL) != 0){
@@ -402,12 +413,10 @@ void router_solve (void* argPtr){
     path_solve_data_t pathSolveData = {
         mazePtr->workQueuePtr,
         mazePtr->gridPtr,
-        myGridPtr,
         routerPtr,
-        myPathVectorPtr,
-        myExpansionQueuePtr,
         queueLockPtr,
         gridLockPtr,
+        coordinateLocksVectorPtr,
         routerPtr->bendCost
     };
 
@@ -447,7 +456,8 @@ void router_solve (void* argPtr){
      * Add my paths to global list
      */
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
-    list_insert(pathVectorListPtr, (void*)myPathVectorPtr);
+    /* TODO: inserir o myPathVectorPtr de cada tarefa na lista */
+    list_insert(pathVectorListPtr, (void*) myPathVectorPtr);
 
     /* Libertar memória e destruir trincos */
 
@@ -456,10 +466,26 @@ void router_solve (void* argPtr){
         perror("pthread_mutex_destroy");
         exit(1);
     }    
-    grid_free(myGridPtr);
-    queue_free(myExpansionQueuePtr);
+
     queue_free(threadsQueuePtr);
 }
+
+
+static pthread_mutex_t* createCoordinateLocksVector(grid_t* gridPtr) {
+    long size = (gridPtr -> width) * (gridPtr -> height) * (gridPtr -> depth);
+    pthread_mutex_t* coordinateLocksVectorPtr = (pthread_mutex_t*) \
+        malloc(sizeof(pthread_mutex_t) * size);
+
+    for (long i = 0; i < size; ++ i)
+        if (pthread_mutex_init(coordinateLocksPtr[i], NULL) != 0) {
+            perror("pthread_mutex_init");
+            exit(1);
+        }
+
+    return coordinateLocksVectorPtr;
+}
+
+
 
 /* =============================================================================
  *

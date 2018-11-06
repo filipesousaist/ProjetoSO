@@ -241,12 +241,11 @@ int main(int argc, char** argv){
     maze_free(mazePtr);
     router_free(routerPtr);
 
-
     list_iter_reset(&it, pathVectorListPtr);
     while (list_iter_hasNext(&it, pathVectorListPtr)) {
         vector_t* pathVectorPtr = (vector_t*)list_iter_next(&it, pathVectorListPtr);
         vector_t* v;
-        while((v = vector_popBack(pathVectorPtr))) {
+        while ((v = vector_popBack(pathVectorPtr))) {
             // v stores pointers to longs stored elsewhere; no need to free them here
             vector_free(v);
         }
