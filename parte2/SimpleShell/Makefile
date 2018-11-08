@@ -23,3 +23,6 @@ $(OBJS):
 clean:
 	@echo Cleaning...
 	rm -f $(OBJS) $(TARGET)
+
+debug:
+	make CFLAGS="$(CFLAGS) -g"

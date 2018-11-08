@@ -284,8 +284,7 @@ int main(int argc, char** argv) {
         assert(threadPtr);
         queue_push(threadsQueuePtr, (void *) threadPtr);
         thread_exec(threadPtr, router_solve, (void*) &routerArg);
-        if (threadPtr->errorCode != THREAD_OK)
-        {
+        if (threadPtr->errorCode != THREAD_OK) {
             thread_displayError(threadPtr);
             exit(1);
         }

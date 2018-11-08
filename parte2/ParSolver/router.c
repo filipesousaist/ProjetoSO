@@ -332,7 +332,7 @@ void* router_solve(void* argPtr) {
         /*seccao critica da pilha abaixo*/
         if (pthread_mutex_lock(queueLockPtr) != 0) {
             perror("pthread_mutex_lock");
-            exit (1);
+            exit(1);
         }
         if (queue_isEmpty(workQueuePtr))
             coordinatePairPtr = NULL; /* já não há mais elementos */
@@ -340,7 +340,7 @@ void* router_solve(void* argPtr) {
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
         if (pthread_mutex_unlock(queueLockPtr) != 0) {
             perror("pthread_mutex_unlock");
-            exit (1);
+            exit(1);
         }
 
         if (coordinatePairPtr == NULL)
@@ -362,7 +362,7 @@ void* router_solve(void* argPtr) {
         }
         if (pthread_mutex_unlock(gridLockPtr) != 0) {
             perror("pthread_mutex_unlock");
-            exit (1);
+            exit(1);
         }
         while (! addPathSuccess) {
             tracebackSuccess = FALSE;
@@ -407,10 +407,10 @@ void* router_solve(void* argPtr) {
     list_insert(pathVectorListPtr, (void*) myPathVectorPtr);
     if (pthread_mutex_unlock(pathVectorListLockPtr) != 0) {
         perror("pthread_mutex_unlock");
-        exit (1);
+        exit(1);
     }
 
-    return NULL; 
+    pthread_exit(NULL);
 }
 
 
