@@ -55,6 +55,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/types.h"
@@ -214,14 +215,25 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr){
  * grid_addPath_Ptr
  * =============================================================================
  */
-bool_t grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr){
+bool_t grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr, \
+    vector_t* coordinateLocksVectorPtr) {
     long i;
     long n = vector_getSize(pointVectorPtr);
 
     for (i = 1; i < (n-1); i++) {
-        long* gridPointPtr = (long*)vector_at(pointVectorPtr, i);
-        pthread_t* lock =
+        long* gridPointPtr = (long*) vector_at(pointVectorPtr, i);
+        pthread_t* lock = grid_getLock(gridPointPtr, gridPtr, \
+            coordinateLocksVectorPtr);
+        if (pthread_mutex_lock(lock) != 0) {
+            perror("pthread_mutex_lock");
+            exit(1);
+        }
+        if ()
         *gridPointPtr = GRID_POINT_FULL;
+        if (pthread_mutex_unlock(lock) != 0) {
+            perror("pthread_mutex_lock");
+            exit(1);
+        }
     }
 }
 
@@ -249,6 +261,17 @@ void grid_printToFile (grid_t* gridPtr, FILE* filePtr){
         fputs("\n", filePtr);
     }
 }
+
+/* =============================================================================
+ * grid_getLock
+ * =============================================================================
+ */
+pthread_mutex_t* grid_getLock(long* pointRef, grid_t* gridPtr, \
+    vector_t* coordinateLocksVectorPtr) {
+    return (pthread_mutex_t*) vector_at(coordinateLocksVectorPtr, \
+        pointRef - gridPtr->points);
+}
+
 
 
 /* =============================================================================

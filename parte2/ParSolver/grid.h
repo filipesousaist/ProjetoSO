@@ -55,6 +55,7 @@
 #define GRID_H 1
 
 #include <stdio.h>
+#include <pthread.h>
 #include "lib/types.h"
 #include "lib/vector.h"
 
@@ -163,6 +164,12 @@ void grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr);
  */
 void grid_printToFile (grid_t* gridPtr, FILE* filePtr);
 
+/* =============================================================================
+ * grid_getLock
+ * =============================================================================
+ */
+pthread_mutex_t* grid_getLock(long* pointRef, grid_t* gridPtr, \
+    vector_t* coordinateLocksVectorPtr);
 
 #endif /* GRID_H */
 

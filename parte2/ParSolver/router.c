@@ -53,6 +53,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/queue.h"
@@ -385,9 +386,6 @@ static void* solvePath(void* data)
  * =============================================================================
  */
 void router_solve (void* argPtr) {
-
-    int i;
-
     router_solve_arg_t* routerArgPtr = (router_solve_arg_t*)argPtr;
     router_t* routerPtr = routerArgPtr->routerPtr;
     maze_t* mazePtr = routerArgPtr->mazePtr;
@@ -428,7 +426,7 @@ void router_solve (void* argPtr) {
     assert(threadsQueuePtr);
     thread_t* threadPtr;
     
-    for (i = 0; i < routerArgPtr->numThreads; ++ i) /* Criar as tarefas */
+    for (int i = 0; i < routerArgPtr->numThreads; ++ i) /* Criar as tarefas */
     {
         threadPtr = thread_alloc();
         assert(threadPtr);
@@ -471,20 +469,39 @@ void router_solve (void* argPtr) {
 }
 
 
-static pthread_mutex_t* createCoordinateLocksVector(grid_t* gridPtr) {
+static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
     long size = (gridPtr -> width) * (gridPtr -> height) * (gridPtr -> depth);
-    pthread_mutex_t* coordinateLocksVectorPtr = (pthread_mutex_t*) \
-        malloc(sizeof(pthread_mutex_t) * size);
+    vector_t* coordinateLocksVectorPtr = vector_alloc(size);
 
-    for (long i = 0; i < size; ++ i)
-        if (pthread_mutex_init(coordinateLocksPtr[i], NULL) != 0) {
+    for (long i = 0; i < size; ++ i) {
+        pthread_mutex_t* newLock = malloc(sizeof(pthread_mutex_t));
+        if (pthread_mutex_init(newLock, NULL) != 0) {
             perror("pthread_mutex_init");
             exit(1);
         }
+        vector_pushBack(coordinateLocksVectorPtr, (void*) newLock);
+    }
 
     return coordinateLocksVectorPtr;
 }
 
+
+static void deleteCoordinateLocksVector(grid_t* gridPtr, \
+    vector_t* coordinateLocksVectorPtr) {
+    long size = vector_getSize(coordinateLocksVectorPtr);
+
+    for (long i = 0; i < size; ++ i) {
+        pthread_mutex_t* curLock = (pthread_mutex_t*) \
+            vector_popBack(coordinateLocksVectorPtr);
+        if (pthread_mutex_destroy(curLock, NULL) != 0) {
+            perror("pthread_mutex_destroy");
+            exit(1);
+        }
+        free(curLock);
+    }
+
+    vector_free(coordinateLocksVectorPtr);
+}
 
 
 /* =============================================================================
