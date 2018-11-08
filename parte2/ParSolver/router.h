@@ -72,18 +72,11 @@ typedef struct router_solve_arg {
     router_t* routerPtr;
     maze_t* mazePtr;
     list_t* pathVectorListPtr;
-    long numThreads;
-} router_solve_arg_t;
-
-typedef struct path_solve_data {
-    queue_t* workQueuePtr;
-    grid_t* gridPtr;
-    router_t* routerPtr;
     pthread_mutex_t* queueLockPtr;
     pthread_mutex_t* gridLockPtr;
-    pthread_mutex_t* coordinateLocksVectorPtr;
-    long bendCost;
-} path_solve_data_t;
+    pthread_mutex_t* pathVectorListLockPtr;
+    vector_t* coordinateLocksVectorPtr;
+} router_solve_arg_t;
 
 
 /* =============================================================================
@@ -104,7 +97,7 @@ void router_free (router_t* routerPtr);
  * router_solve
  * =============================================================================
  */
-void router_solve (void* argPtr);
+void* router_solve (void* argPtr);
 
 
 #endif /* ROUTER_H */

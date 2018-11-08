@@ -155,7 +155,8 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr);
  * grid_addPath_Ptr
  * =============================================================================
  */
-void grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr);
+bool_t grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr, \
+	vector_t* coordinateLocksVectorPtr);
 
 
 /* =============================================================================
@@ -163,13 +164,6 @@ void grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr);
  * =============================================================================
  */
 void grid_printToFile (grid_t* gridPtr, FILE* filePtr);
-
-/* =============================================================================
- * grid_getLock
- * =============================================================================
- */
-pthread_mutex_t* grid_getLock(long* pointRef, grid_t* gridPtr, \
-    vector_t* coordinateLocksVectorPtr);
 
 #endif /* GRID_H */
 
