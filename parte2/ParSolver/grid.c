@@ -239,9 +239,11 @@ bool_t grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr, \
             perror("pthread_mutex_lock");
             exit(1);
         }
-        if (*gridPointPtr == GRID_POINT_FULL)
+        if (*gridPointPtr == GRID_POINT_FULL) {
             result = FALSE;
-        *gridPointPtr = GRID_POINT_FULL;
+        }
+        else
+            *gridPointPtr = GRID_POINT_FULL;
         if (pthread_mutex_unlock(lock) != 0) {
             perror("pthread_mutex_lock");
             exit(1);

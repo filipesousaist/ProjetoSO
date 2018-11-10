@@ -307,11 +307,9 @@ void* router_solve(void* argPtr) {
 
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
     pthread_mutex_t* queueLockPtr = routerArgPtr->queueLockPtr;
-    pthread_mutex_t* gridLockPtr = routerArgPtr->gridLockPtr;
     pthread_mutex_t* pathVectorListLockPtr = \
         routerArgPtr->pathVectorListLockPtr;
     vector_t* coordinateLocksVectorPtr = routerArgPtr->coordinateLocksVectorPtr;
-
 
     /* Creation of local variables */
     grid_t* myGridPtr = grid_alloc(mazePtr->gridPtr->width, \
@@ -329,13 +327,12 @@ void* router_solve(void* argPtr) {
     while (TRUE) {
         pair_t* coordinatePairPtr;
 
-        /*seccao critica da pilha abaixo*/
         if (pthread_mutex_lock(queueLockPtr) != 0) {
             perror("pthread_mutex_lock");
             exit(1);
         }
         if (queue_isEmpty(workQueuePtr))
-            coordinatePairPtr = NULL; /* já não há mais elementos */
+            coordinatePairPtr = NULL; /* no more paths to route */
         else
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
         if (pthread_mutex_unlock(queueLockPtr) != 0) {
@@ -355,15 +352,6 @@ void* router_solve(void* argPtr) {
         bool_t addPathSuccess = FALSE;
         vector_t* pointVectorPtr = NULL;
 
-        /* secção critica da grid abaixo */
-        if (pthread_mutex_lock(gridLockPtr) != 0) {
-            perror("pthread_mutex_lock");
-            exit(1);
-        }
-        if (pthread_mutex_unlock(gridLockPtr) != 0) {
-            perror("pthread_mutex_unlock");
-            exit(1);
-        }
         while (! addPathSuccess) {
             tracebackSuccess = FALSE;
             /* Create a copy of the grid, over which the 
@@ -383,10 +371,6 @@ void* router_solve(void* argPtr) {
             if (! tracebackSuccess) /* traceback failed, don't try again */
                 break;
         }
-        /*if (pthread_mutex_unlock(gridLockPtr) != 0) {
-            perror("pthread_mutex_unlock");
-            exit (1);
-        }*/
 
         if (tracebackSuccess) {
             bool_t status = vector_pushBack(myPathVectorPtr, (void*)pointVectorPtr);
