@@ -1,5 +1,6 @@
 #!/bin/bash
-for f in ParSolver/inputs/*txt.*; do
+
+for f in inputs/*txt.*; do
 	if [ -e $f ]; then
 		rm $f
 		echo Removed $f

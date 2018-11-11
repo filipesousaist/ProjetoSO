@@ -54,6 +54,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <errno.h>
+#include <time.h>
 #include "coordinate.h"
 #include "grid.h"
 #include "lib/queue.h"
@@ -142,7 +144,8 @@ static void expandToNeighbor (grid_t* myGridPtr, long x, long y, long z, long va
  * doExpansion
  * =============================================================================
  */
-static bool_t doExpansion (router_t* routerPtr, grid_t* myGridPtr, queue_t* queuePtr, coordinate_t* srcPtr, coordinate_t* dstPtr){
+static bool_t doExpansion (router_t* routerPtr, grid_t* myGridPtr, \
+    queue_t* queuePtr, coordinate_t* srcPtr, coordinate_t* dstPtr){
     long xCost = routerPtr->xCost;
     long yCost = routerPtr->yCost;
     long zCost = routerPtr->zCost;
@@ -186,6 +189,7 @@ static bool_t doExpansion (router_t* routerPtr, grid_t* myGridPtr, queue_t* queu
         expandToNeighbor(myGridPtr, x,   y,   z+1, (value + zCost), queuePtr);
         expandToNeighbor(myGridPtr, x,   y,   z-1, (value + zCost), queuePtr);
 
+
     } /* iterate over work queue */
 
     return isPathFound;
@@ -196,7 +200,9 @@ static bool_t doExpansion (router_t* routerPtr, grid_t* myGridPtr, queue_t* queu
  * traceToNeighbor
  * =============================================================================
  */
-static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, point_t* movePtr, bool_t useMomentum, long bendCost, point_t* nextPtr){
+static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, \
+    point_t* movePtr, bool_t useMomentum, long bendCost, \
+    point_t* nextPtr, vector_t* coordinateLocksVectorPtr) {
     long x = currPtr->x + movePtr->x;
     long y = currPtr->y + movePtr->y;
     long z = currPtr->z + movePtr->z;
@@ -210,6 +216,24 @@ static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, point_t* moveP
         if (useMomentum && (currPtr->momentum != movePtr->momentum)) {
             b = bendCost;
         }
+        long* gridPointPtr = grid_getPointRef(myGridPtr, x, y, z);
+        pthread_mutex_t* lock = vector_at(coordinateLocksVectorPtr, \
+            gridPointPtr - myGridPtr->points);
+        int tryLockResult = pthread_mutex_trylock(lock);
+        if (tryLockResult == 0) {
+            if (pthread_mutex_unlock(lock) != 0) {
+                perror("pthread_mutex_unlock");
+                exit(1);
+            }
+        }
+        else if (tryLockResult == EBUSY) { 
+            value += 1;
+        }
+        else {
+            perror("pthread_mutex_trylock");
+            exit(1);
+        }
+        
         if ((value + b) <= nextPtr->value) { /* '=' favors neighbors over current */
             nextPtr->x = x;
             nextPtr->y = y;
@@ -225,7 +249,8 @@ static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, point_t* moveP
  * doTraceback
  * =============================================================================
  */
-static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* dstPtr, long bendCost){
+static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, \
+    coordinate_t* dstPtr, long bendCost, vector_t* coordinateLocksVectorPtr) {
     vector_t* pointVectorPtr = vector_alloc(1);
     assert(pointVectorPtr);
 
@@ -237,15 +262,14 @@ static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* 
     next.momentum = MOMENTUM_ZERO;
 
     while (1) {
-
         long* gridPointPtr = grid_getPointRef(gridPtr, next.x, next.y, next.z);
         vector_pushBack(pointVectorPtr, (void*)gridPointPtr);
         grid_setPoint(myGridPtr, next.x, next.y, next.z, GRID_POINT_FULL);
 
         /* Check if we are done */
-        if (next.value == 0) {
-            break;
-        }
+        if (next.value == 0) 
+            break;   
+        
         point_t curr = next;
 
         /*
@@ -253,12 +277,12 @@ static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* 
          *
          * Potential Optimization: Only need to check 5 of these
          */
-        traceToNeighbor(myGridPtr, &curr, &MOVE_POSX, TRUE, bendCost, &next);
-        traceToNeighbor(myGridPtr, &curr, &MOVE_POSY, TRUE, bendCost, &next);
-        traceToNeighbor(myGridPtr, &curr, &MOVE_POSZ, TRUE, bendCost, &next);
-        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGX, TRUE, bendCost, &next);
-        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGY, TRUE, bendCost, &next);
-        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGZ, TRUE, bendCost, &next);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_POSX, TRUE, bendCost, &next, coordinateLocksVectorPtr);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_POSY, TRUE, bendCost, &next, coordinateLocksVectorPtr);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_POSZ, TRUE, bendCost, &next, coordinateLocksVectorPtr);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGX, TRUE, bendCost, &next, coordinateLocksVectorPtr);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGY, TRUE, bendCost, &next, coordinateLocksVectorPtr);
+        traceToNeighbor(myGridPtr, &curr, &MOVE_NEGZ, TRUE, bendCost, &next, coordinateLocksVectorPtr);
 
         /*
          * Because of bend costs, none of the neighbors may appear to be closer.
@@ -269,12 +293,12 @@ static vector_t* doTraceback (grid_t* gridPtr, grid_t* myGridPtr, coordinate_t* 
             (curr.z == next.z))
         {
             next.value = curr.value;
-            traceToNeighbor(myGridPtr, &curr, &MOVE_POSX, FALSE, bendCost, &next);
-            traceToNeighbor(myGridPtr, &curr, &MOVE_POSY, FALSE, bendCost, &next);
-            traceToNeighbor(myGridPtr, &curr, &MOVE_POSZ, FALSE, bendCost, &next);
-            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGX, FALSE, bendCost, &next);
-            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGY, FALSE, bendCost, &next);
-            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGZ, FALSE, bendCost, &next);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_POSX, FALSE, bendCost, &next, coordinateLocksVectorPtr);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_POSY, FALSE, bendCost, &next, coordinateLocksVectorPtr);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_POSZ, FALSE, bendCost, &next, coordinateLocksVectorPtr);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGX, FALSE, bendCost, &next, coordinateLocksVectorPtr);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGY, FALSE, bendCost, &next, coordinateLocksVectorPtr);
+            traceToNeighbor(myGridPtr, &curr, &MOVE_NEGZ, FALSE, bendCost, &next, coordinateLocksVectorPtr);
 
             if ((curr.x == next.x) &&
                 (curr.y == next.y) &&
@@ -307,11 +331,9 @@ void* router_solve(void* argPtr) {
 
     list_t* pathVectorListPtr = routerArgPtr->pathVectorListPtr;
     pthread_mutex_t* queueLockPtr = routerArgPtr->queueLockPtr;
-    pthread_mutex_t* gridLockPtr = routerArgPtr->gridLockPtr;
     pthread_mutex_t* pathVectorListLockPtr = \
         routerArgPtr->pathVectorListLockPtr;
     vector_t* coordinateLocksVectorPtr = routerArgPtr->coordinateLocksVectorPtr;
-
 
     /* Creation of local variables */
     grid_t* myGridPtr = grid_alloc(mazePtr->gridPtr->width, \
@@ -329,13 +351,12 @@ void* router_solve(void* argPtr) {
     while (TRUE) {
         pair_t* coordinatePairPtr;
 
-        /*seccao critica da pilha abaixo*/
         if (pthread_mutex_lock(queueLockPtr) != 0) {
             perror("pthread_mutex_lock");
             exit(1);
         }
         if (queue_isEmpty(workQueuePtr))
-            coordinatePairPtr = NULL; /* já não há mais elementos */
+            coordinatePairPtr = NULL; /* no more paths to route */
         else
             coordinatePairPtr = (pair_t*)queue_pop(workQueuePtr);
         if (pthread_mutex_unlock(queueLockPtr) != 0) {
@@ -351,19 +372,10 @@ void* router_solve(void* argPtr) {
 
         pair_free(coordinatePairPtr);
 
-        bool_t tracebackSuccess = FALSE;
+        bool_t tracebackSuccess;
         bool_t addPathSuccess = FALSE;
         vector_t* pointVectorPtr = NULL;
 
-        /* secção critica da grid abaixo */
-        if (pthread_mutex_lock(gridLockPtr) != 0) {
-            perror("pthread_mutex_lock");
-            exit(1);
-        }
-        if (pthread_mutex_unlock(gridLockPtr) != 0) {
-            perror("pthread_mutex_unlock");
-            exit(1);
-        }
         while (! addPathSuccess) {
             tracebackSuccess = FALSE;
             /* Create a copy of the grid, over which the 
@@ -373,7 +385,8 @@ void* router_solve(void* argPtr) {
             if (doExpansion(routerPtr, myGridPtr, myExpansionQueuePtr, \
                              srcPtr, dstPtr)) {
                 pointVectorPtr = \
-                    doTraceback(gridPtr, myGridPtr, dstPtr, bendCost);
+                    doTraceback(gridPtr, myGridPtr, dstPtr, bendCost, \
+                        coordinateLocksVectorPtr);
                 if (pointVectorPtr) {
                     tracebackSuccess = TRUE;
                     addPathSuccess = grid_addPath_Ptr(gridPtr, pointVectorPtr, \
@@ -383,13 +396,10 @@ void* router_solve(void* argPtr) {
             if (! tracebackSuccess) /* traceback failed, don't try again */
                 break;
         }
-        /*if (pthread_mutex_unlock(gridLockPtr) != 0) {
-            perror("pthread_mutex_unlock");
-            exit (1);
-        }*/
 
         if (tracebackSuccess) {
-            bool_t status = vector_pushBack(myPathVectorPtr, (void*)pointVectorPtr);
+            bool_t status = vector_pushBack(myPathVectorPtr, \
+                (void*) pointVectorPtr);
             assert(status);
         }
     }
@@ -398,8 +408,7 @@ void* router_solve(void* argPtr) {
     queue_free(myExpansionQueuePtr);
 
 
-    /* Add my paths to global list */
-    
+    /* Add my paths to global list */ 
     if (pthread_mutex_lock(pathVectorListLockPtr) != 0) {
         perror("pthread_mutex_lock");
         exit(1);
