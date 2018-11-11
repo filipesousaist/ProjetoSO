@@ -216,6 +216,8 @@ static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, \
         if (useMomentum && (currPtr->momentum != movePtr->momentum)) {
             b = bendCost;
         }
+
+        /* Check is current point is locked */
         long* gridPointPtr = grid_getPointRef(myGridPtr, x, y, z);
         pthread_mutex_t* lock = vector_at(coordinateLocksVectorPtr, \
             gridPointPtr - myGridPtr->points);
@@ -227,8 +229,8 @@ static void traceToNeighbor (grid_t* myGridPtr, point_t* currPtr, \
             }
         }
         else if (tryLockResult == EBUSY) { 
-            value += 1;
-        }
+            value += 1; /* If point is locked, increase its cost, to  */
+        }               /* decrease the likelihood that it is chosen. */
         else {
             perror("pthread_mutex_trylock");
             exit(1);
@@ -347,7 +349,6 @@ void* router_solve(void* argPtr) {
     /* Iterate over work list to route each path. This involves an
      * 'expansion' and 'traceback' phase for each source/destination pair.
      */
-
     while (TRUE) {
         pair_t* coordinatePairPtr;
 
