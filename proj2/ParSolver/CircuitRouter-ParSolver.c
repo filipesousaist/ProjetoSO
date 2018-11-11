@@ -192,9 +192,7 @@ static void deleteCoordinateLocksVector(vector_t* coordinateLocksVectorPtr) {
  * =============================================================================
  */
 int main(int argc, char** argv) {
-    /*
-     * Initialization
-     */
+    /* Initialization */
     char* inputFileName = parseArgs(argc, (char** const)argv);
     if (inputFileName == NULL) {
         fputs("No file name specified\n", stderr);
@@ -209,14 +207,16 @@ int main(int argc, char** argv) {
     assert(outputFileName);
     sprintf(outputFileName, "%s.res", inputFileName);
 
-    if (access(outputFileName, F_OK) == 0) {/* output file exists */
+    if (access(outputFileName, F_OK) == 0) { /* output file exists */
         char* oldFileName = (char *) \
             malloc((strlen(outputFileName) + NUM_CHARS_EXT + 1) * sizeof(char));
         assert(oldFileName);
         sprintf(oldFileName, "%s.old", outputFileName);
 
-        if (rename(outputFileName, oldFileName) == -1)
+        if (rename(outputFileName, oldFileName) == -1) {
             perror("rename");
+            exit(1);
+        }
         free(oldFileName);
     }
 
@@ -240,43 +240,40 @@ int main(int argc, char** argv) {
 
     /* Creation of the locks */
     pthread_mutex_t* queueLockPtr = \
-    (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+        (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
     assert(queueLockPtr);
-    pthread_mutex_t* gridLockPtr = \
-    (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
-    assert(gridLockPtr);
     pthread_mutex_t* pathVectorListLockPtr = \
-    (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
+        (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
     assert(pathVectorListLockPtr);
-
     vector_t* coordinateLocksVectorPtr = \
         createCoordinateLocksVector(mazePtr->gridPtr);
+    assert(coordinateLocksVectorPtr);
 
     /* Initialization of the locks */
     if (pthread_mutex_init(queueLockPtr, NULL) != 0 || \
-        pthread_mutex_init(gridLockPtr, NULL) != 0 || \
-        pthread_mutex_init(pathVectorListLockPtr, NULL) != 0){
+        pthread_mutex_init(pathVectorListLockPtr, NULL) != 0) {
         perror("pthread_mutex_init");
         exit(1);
     }
 
+    /* Creation of the structure to pass to each thread */
     router_solve_arg_t routerArg = { \
         routerPtr, \
         mazePtr, \
         pathVectorListPtr, \
         queueLockPtr, \
-        gridLockPtr, \
         pathVectorListLockPtr, \
         coordinateLocksVectorPtr \
     };
 
     TIMER_T startTime;
     TIMER_READ(startTime);
-
+    
+    /* Initization of threads queue */
     queue_t* threadsQueuePtr = queue_alloc(global_params[PARAM_NUMTHREADS]);
     assert(threadsQueuePtr);
     thread_t* threadPtr;
-    
+
     /* Creation of threads */
     for (int i = 0; i < global_params[PARAM_NUMTHREADS]; ++ i) 
     {
@@ -300,24 +297,42 @@ int main(int argc, char** argv) {
         }
     }
 
+    /* Release all coordinate locks */
+    list_iter_t listIt;
+    list_iter_reset(&listIt, pathVectorListPtr);
+    while (list_iter_hasNext(&listIt, pathVectorListPtr)) {
+        vector_t* curPathVectorPtr = (vector_t*) \
+            list_iter_next(&listIt, pathVectorListPtr);
+        long numPaths = vector_getSize(curPathVectorPtr);
+        for (int p = 0; p < numPaths; p++) {
+            vector_t* curPointVectorPtr = vector_at(curPathVectorPtr, p);
+            long size = vector_getSize(curPointVectorPtr);
+            for (int pnt = 1; pnt < size - 1; pnt++) {
+                long* gridPointPtr = (long*) vector_at(curPointVectorPtr, pnt);
+                pthread_mutex_t* lock = (pthread_mutex_t*) vector_at( \
+                    coordinateLocksVectorPtr, gridPointPtr - mazePtr->gridPtr->points);
+                if (pthread_mutex_unlock(lock) != 0) {
+                    perror("pthread_mutex_unlock");
+                    exit(1);
+                }
+            }
+        }
+    }
     /* Free memory and destroy locks */
-
     if (pthread_mutex_destroy(queueLockPtr) != 0 || \
-        pthread_mutex_destroy(gridLockPtr) != 0 || \
         pthread_mutex_destroy(pathVectorListLockPtr) != 0){
         perror("pthread_mutex_destroy");
         exit(1);
     } 
-
     deleteCoordinateLocksVector(coordinateLocksVectorPtr);
     free(queueLockPtr);
-    free(gridLockPtr);
     free(pathVectorListLockPtr);
     queue_free(threadsQueuePtr);
 
     TIMER_T stopTime;
     TIMER_READ(stopTime);
 
+    /* Caluclate number of paths routed */
     long numPathRouted = 0;
     list_iter_t it;
     list_iter_reset(&it, pathVectorListPtr);
@@ -355,7 +370,6 @@ int main(int argc, char** argv) {
         vector_free(pathVectorPtr);
     }
     list_free(pathVectorListPtr);
-
 
     exit(0);
 }

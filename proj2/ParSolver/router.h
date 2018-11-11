@@ -73,7 +73,6 @@ typedef struct router_solve_arg {
     maze_t* mazePtr;
     list_t* pathVectorListPtr;
     pthread_mutex_t* queueLockPtr;
-    pthread_mutex_t* gridLockPtr;
     pthread_mutex_t* pathVectorListLockPtr;
     vector_t* coordinateLocksVectorPtr;
 } router_solve_arg_t;

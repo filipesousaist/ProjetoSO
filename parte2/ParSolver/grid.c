@@ -52,6 +52,7 @@
 
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -63,16 +64,6 @@
 
 
 const unsigned long CACHE_LINE_SIZE = 32UL;
-
-/* =============================================================================
- * getLockRef
- * =============================================================================
- */
-static pthread_mutex_t* getLockRef(long* pointRef, grid_t* gridPtr, \
-    vector_t* coordinateLocksVectorPtr) {
-    return (pthread_mutex_t*) vector_at(coordinateLocksVectorPtr, \
-        pointRef - gridPtr->points);
-}
 
 /* =============================================================================
  * grid_alloc
@@ -227,43 +218,40 @@ void grid_addPath (grid_t* gridPtr, vector_t* pointVectorPtr){
 bool_t grid_addPath_Ptr (grid_t* gridPtr, vector_t* pointVectorPtr, \
     vector_t* coordinateLocksVectorPtr) {
     bool_t result = TRUE;
-    long n = vector_getSize(pointVectorPtr);
+    long size = vector_getSize(pointVectorPtr);
     long i;
     long* gridPointPtr;
 
-    for (i = 1; i < (n-1); i++) {
+    /* Get all needed locks */
+    for (i = 1; i < size - 1; i++) {
         gridPointPtr = (long*) vector_at(pointVectorPtr, i);
-        pthread_mutex_t* lock = getLockRef(gridPointPtr, gridPtr, \
-            coordinateLocksVectorPtr);
-        if (pthread_mutex_lock(lock) != 0) {
-            perror("pthread_mutex_lock");
-            exit(1);
-        }
-        if (*gridPointPtr == GRID_POINT_FULL) {
+        pthread_mutex_t* lock = (pthread_mutex_t*) \
+            vector_at(coordinateLocksVectorPtr, gridPointPtr - gridPtr->points);
+
+        int tryLockResult = pthread_mutex_trylock(lock);
+        if (tryLockResult == EBUSY) { /* failed to obtain lock */
             result = FALSE;
+            break;
         }
-        else
-            *gridPointPtr = GRID_POINT_FULL;
-        if (pthread_mutex_unlock(lock) != 0) {
-            perror("pthread_mutex_lock");
+        else if (tryLockResult != 0) {
+            perror("pthread_mutex_trylock");
             exit(1);
         }
-        if (! result)
-            break;
     }
 
-    if (! result) {
+    if (result) /* Fill in the path */
+        for (i = 1; i < size - 1; i++) {
+            gridPointPtr = (long*) vector_at(pointVectorPtr, i);
+            *gridPointPtr = GRID_POINT_FULL;
+        }
+
+    else { /* Release all the locks */
         for (i--; i > 0; i--) { 
             gridPointPtr = (long*) vector_at(pointVectorPtr, i);
-            pthread_mutex_t* lock = getLockRef(gridPointPtr, gridPtr, \
-                coordinateLocksVectorPtr);
-            if (pthread_mutex_lock(lock) != 0) {
-                perror("pthread_mutex_lock");
-                exit(1);
-            }
-            *gridPointPtr = GRID_POINT_EMPTY;
+            pthread_mutex_t* lock = (pthread_mutex_t*) vector_at( \
+                coordinateLocksVectorPtr, gridPointPtr - gridPtr->points);
             if (pthread_mutex_unlock(lock) != 0) {
-                perror("pthread_mutex_lock");
+                perror("pthread_mutex_unlock");
                 exit(1);
             }
         }

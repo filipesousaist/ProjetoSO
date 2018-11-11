@@ -297,6 +297,27 @@ int main(int argc, char** argv) {
         }
     }
 
+    /* Release all coordinate locks */
+    list_iter_t listIt;
+    list_iter_reset(&listIt, pathVectorListPtr);
+    while (list_iter_hasNext(&listIt, pathVectorListPtr)) {
+        vector_t* curPathVectorPtr = (vector_t*) \
+            list_iter_next(&listIt, pathVectorListPtr);
+        long numPaths = vector_getSize(curPathVectorPtr);
+        for (int p = 0; p < numPaths; p++) {
+            vector_t* curPointVectorPtr = vector_at(curPathVectorPtr, p);
+            long size = vector_getSize(curPointVectorPtr);
+            for (int pnt = 1; pnt < size - 1; pnt++) {
+                long* gridPointPtr = (long*) vector_at(curPointVectorPtr, pnt);
+                pthread_mutex_t* lock = (pthread_mutex_t*) vector_at( \
+                    coordinateLocksVectorPtr, gridPointPtr - mazePtr->gridPtr->points);
+                if (pthread_mutex_unlock(lock) != 0) {
+                    perror("pthread_mutex_unlock");
+                    exit(1);
+                }
+            }
+        }
+    }
     /* Free memory and destroy locks */
     if (pthread_mutex_destroy(queueLockPtr) != 0 || \
         pthread_mutex_destroy(pathVectorListLockPtr) != 0){
