@@ -10,7 +10,7 @@
 
 #define BUFFERSIZE 200
 #define PID_VECTOR_START 20
-#define SOLVER_NAME "CircuitRouter-ParSolver"
+#define SEQ_SOLVER_NAME "CircuitRouter-ParSolver"
 
 enum {
 	ERR_LINEARGS,
@@ -18,21 +18,11 @@ enum {
 	ERR_FORK
 }; 
 
-
-/* =============================================================================
- * exitedNormally
- * =============================================================================
- */
 bool_t exitedNormally(int status) {
 	return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }
 
-
-/* =============================================================================
- * waitNext
- * =============================================================================
- */
-void waitNext(vector_t* pidVector, vector_t* statusVector)
+void waitNext(vector_t* pidVector, vector_t* stateVector)
 {
 	pid_t* pidPtr = (pid_t *) malloc(sizeof(pid_t));
 	assert(pidPtr);
@@ -40,14 +30,9 @@ void waitNext(vector_t* pidVector, vector_t* statusVector)
 	assert(pStatusPtr);
 	while ((*pidPtr = wait(pStatusPtr)) == -1);
 	vector_pushBack(pidVector, pidPtr);
-	vector_pushBack(statusVector, pStatusPtr);
+	vector_pushBack(stateVector, pStatusPtr);
 }
 
-
-/* =============================================================================
- * displayError
- * =============================================================================
- */
 void displayError(int code) {
 	switch (code) {
 		case ERR_LINEARGS:
@@ -62,7 +47,6 @@ void displayError(int code) {
 	}
 }
 
-
 int main(int argc, char const *argv[]) {
 	long maxChildren = -1; /* -1 means no limit of child processes */
 	long numChildren = 0;
@@ -74,8 +58,8 @@ int main(int argc, char const *argv[]) {
 	int* pStatusPtr; /* process exit status */	
 	vector_t* pidVector = vector_alloc(PID_VECTOR_START);
 	assert(pidVector);
-	vector_t* statusVector = vector_alloc(PID_VECTOR_START);
-	assert(statusVector);
+	vector_t* stateVector = vector_alloc(PID_VECTOR_START);
+	assert(stateVector);
 
 	if (argc == 2) {
 		if (sscanf(argv[1],"%ld", &maxChildren) != 1) {
@@ -92,21 +76,21 @@ int main(int argc, char const *argv[]) {
 
 		if (strcmp(argVector[0], "run") == 0) {
 			if (numChildren == maxChildren) {
-				waitNext(pidVector, statusVector);
-				numChildren--;
+				waitNext(pidVector, stateVector);
+				-- numChildren;
 			}
 			if ((pid = fork()) == -1) { /* error creating child */
 				displayError(ERR_FORK);
 				continue;
 			}
 			else if (pid == 0) { /* child process */
-				char* args[] = {SOLVER_NAME, argVector[1]};
-				execv(SOLVER_NAME, args);
+				char* args[] = {SEQ_SOLVER_NAME, argVector[1]};
+				execv(SEQ_SOLVER_NAME, args);
 				perror("execv");
 				exit(1);
 			}
 			else /* parent process */
-				numChildren++;
+				++ numChildren;
 		}
 		else if (strcmp(argVector[0], "exit") == 0)	
 			break;
@@ -116,11 +100,11 @@ int main(int argc, char const *argv[]) {
 		}
 	}
 
-	for (;numChildren > 0; numChildren--)
-		waitNext(pidVector, statusVector);
+	for (;numChildren > 0; -- numChildren)
+		waitNext(pidVector, stateVector);
 	
 	while ((pidPtr = vector_popBack(pidVector)) != NULL) {
-		pStatusPtr = vector_popBack(statusVector);
+		pStatusPtr = vector_popBack(stateVector);
 		printf("CHILD EXITED (PID=%li; ", (long) *pidPtr);
 		if (exitedNormally(*pStatusPtr))
 			puts("return OK)");
@@ -130,15 +114,7 @@ int main(int argc, char const *argv[]) {
 		free(pStatusPtr);
 	}
 	vector_free(pidVector);
-	vector_free(statusVector);
+	vector_free(stateVector);
 	puts("END.");
 	return 0;
 }
-
-
-/* =============================================================================
- *
- * End of CircuitRouter-SimpleShell.c
- *
- * =============================================================================
- */

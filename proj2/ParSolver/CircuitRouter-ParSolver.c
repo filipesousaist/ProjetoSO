@@ -153,11 +153,6 @@ static char* parseArgs (long argc, char* const argv[]) {
     return argv[optind]; 
 }
 
-
-/* =============================================================================
- * createCoordinateLocksVector
- * =============================================================================
- */
 static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
     long size = (gridPtr -> width) * (gridPtr -> height) * (gridPtr -> depth);
     vector_t* coordinateLocksVectorPtr = vector_alloc(size);
@@ -174,10 +169,7 @@ static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
     return coordinateLocksVectorPtr;
 }
 
-/* =============================================================================
- * deleteCoordinateLocksVector
- * =============================================================================
- */
+
 static void deleteCoordinateLocksVector(vector_t* coordinateLocksVectorPtr) {
     long size = vector_getSize(coordinateLocksVectorPtr);
 
@@ -246,9 +238,6 @@ int main(int argc, char** argv) {
     list_t* pathVectorListPtr = list_alloc(NULL);
     assert(pathVectorListPtr);
 
-    TIMER_T startTime;
-    TIMER_READ(startTime);
-
     /* Creation of the locks */
     pthread_mutex_t* queueLockPtr = \
         (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
@@ -276,6 +265,9 @@ int main(int argc, char** argv) {
         pathVectorListLockPtr, \
         coordinateLocksVectorPtr \
     };
+
+    TIMER_T startTime;
+    TIMER_READ(startTime);
     
     /* Initization of threads queue */
     queue_t* threadsQueuePtr = queue_alloc(global_params[PARAM_NUMTHREADS]);
