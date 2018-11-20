@@ -45,67 +45,67 @@
  *
  * =============================================================================
  *
- * router.h
+ * coordinate.h
  *
  * =============================================================================
  */
 
 
-#ifndef ROUTER_H
-#define ROUTER_H 1
+#ifndef COORDINATE_H
+#define COORDINATE_H 1
 
-#include <pthread.h>
-#include "grid.h"
-#include "maze.h"
-#include "lib/queue.h"
-#include "lib/list.h"
-#include "lib/vector.h"
 
-typedef struct router {
-    long xCost;
-    long yCost;
-    long zCost;
-    long bendCost;
-} router_t;
+#include "lib/types.h"
 
-typedef struct router_solve_arg {
-    router_t* routerPtr;
-    maze_t* mazePtr;
-    list_t* pathVectorListPtr;
-    pthread_mutex_t* queueLockPtr;
-    pthread_mutex_t* pathVectorListLockPtr;
-    vector_t* coordinateLocksVectorPtr;
-    pthread_t mainThreadId;
-} router_solve_arg_t;
+typedef struct coordinate {
+    long x;
+    long y;
+    long z;
+} coordinate_t;
 
 
 /* =============================================================================
- * router_alloc
+ * coordinate_alloc
  * =============================================================================
  */
-router_t* router_alloc (long xCost, long yCost, long zCost, long bendCost);
+coordinate_t* coordinate_alloc (long x, long y, long z);
 
 
 /* =============================================================================
- * router_free
+ * coordinate_free
  * =============================================================================
  */
-void router_free (router_t* routerPtr);
+void coordinate_free (coordinate_t* coordinatePtr);
 
 
 /* =============================================================================
- * router_solve
+ * coordinate_isEqual
  * =============================================================================
  */
-void* router_solve (void* argPtr);
+bool_t coordinate_isEqual (coordinate_t* aPtr, coordinate_t* bPtr);
 
 
-#endif /* ROUTER_H */
+/* =============================================================================
+ * coordinate_comparePair
+ * -- For sorting in list of source/destination pairs
+ * =============================================================================
+ */
+long coordinate_comparePair (const void* aPtr, const void* bPtr);
+
+
+/* =============================================================================
+ * coordinate_areAdjacent
+ * =============================================================================
+ */
+bool_t coordinate_areAdjacent (coordinate_t* aPtr, coordinate_t* bPtr);
+
+
+#endif /* COORDINATE_H */
 
 
 /* =============================================================================
  *
- * End of router.h
+ * End of coordinate.h
  *
  * =============================================================================
  */

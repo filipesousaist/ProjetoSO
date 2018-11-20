@@ -1,36 +1,58 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * This code is an adaptation of the Lee algorithm's implementation originally included in the STAMP Benchmark
- * by Stanford University.
+/* =============================================================================
  *
- * The original copyright notice is included below.
+ * queue.h
  *
-  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * =============================================================================
+ *
  * Copyright (C) Stanford University, 2006.  All Rights Reserved.
  * Author: Chi Cao Minh
  *
  * =============================================================================
  *
+ * For the license of bayes/sort.h and bayes/sort.c, please see the header
+ * of the files.
+ * 
+ * ------------------------------------------------------------------------
+ * 
+ * For the license of kmeans, please see kmeans/LICENSE.kmeans
+ * 
+ * ------------------------------------------------------------------------
+ * 
+ * For the license of ssca2, please see ssca2/COPYRIGHT
+ * 
+ * ------------------------------------------------------------------------
+ * 
+ * For the license of lib/mt19937ar.c and lib/mt19937ar.h, please see the
+ * header of the files.
+ * 
+ * ------------------------------------------------------------------------
+ * 
+ * For the license of lib/rbtree.h and lib/rbtree.c, please see
+ * lib/LEGALNOTICE.rbtree and lib/LICENSE.rbtree
+ * 
+ * ------------------------------------------------------------------------
+ * 
  * Unless otherwise noted, the following license applies to STAMP files:
- *
+ * 
  * Copyright (c) 2007, Stanford University
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
- *
+ * 
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
- *
+ * 
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *
+ * 
  *     * Neither the name of Stanford University nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY STANFORD UNIVERSITY ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -44,68 +66,83 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  * =============================================================================
- *
- * router.h
- *
- * =============================================================================
  */
 
 
-#ifndef ROUTER_H
-#define ROUTER_H 1
+#ifndef QUEUE_H
+#define QUEUE_H 1
 
-#include <pthread.h>
-#include "grid.h"
-#include "maze.h"
-#include "lib/queue.h"
-#include "lib/list.h"
-#include "lib/vector.h"
+#include "types.h"
 
-typedef struct router {
-    long xCost;
-    long yCost;
-    long zCost;
-    long bendCost;
-} router_t;
 
-typedef struct router_solve_arg {
-    router_t* routerPtr;
-    maze_t* mazePtr;
-    list_t* pathVectorListPtr;
-    pthread_mutex_t* queueLockPtr;
-    pthread_mutex_t* pathVectorListLockPtr;
-    vector_t* coordinateLocksVectorPtr;
-    pthread_t mainThreadId;
-} router_solve_arg_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+typedef struct queue queue_t;
 
 
 /* =============================================================================
- * router_alloc
+ * queue_alloc
  * =============================================================================
  */
-router_t* router_alloc (long xCost, long yCost, long zCost, long bendCost);
+queue_t*
+queue_alloc (long initCapacity);
 
 
 /* =============================================================================
- * router_free
+ * queue_free
  * =============================================================================
  */
-void router_free (router_t* routerPtr);
+void
+queue_free (queue_t* queuePtr);
 
 
 /* =============================================================================
- * router_solve
+ * queue_isEmpty
  * =============================================================================
  */
-void* router_solve (void* argPtr);
+bool_t
+queue_isEmpty (queue_t* queuePtr);
 
 
-#endif /* ROUTER_H */
+/* =============================================================================
+ * queue_clear
+ * =============================================================================
+ */
+void
+queue_clear (queue_t* queuePtr);
+
+
+/* =============================================================================
+ * queue_push
+ * =============================================================================
+ */
+bool_t
+queue_push (queue_t* queuePtr, void* dataPtr);
+
+
+/* =============================================================================
+ * queue_pop
+ * =============================================================================
+ */
+void*
+queue_pop (queue_t* queuePtr);
+
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#endif /* QUEUE_H */
 
 
 /* =============================================================================
  *
- * End of router.h
+ * End of queue.h
  *
  * =============================================================================
  */
+

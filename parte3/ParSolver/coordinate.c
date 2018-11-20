@@ -45,67 +45,119 @@
  *
  * =============================================================================
  *
- * router.h
+ * coordinate.c
  *
  * =============================================================================
  */
 
 
-#ifndef ROUTER_H
-#define ROUTER_H 1
-
-#include <pthread.h>
-#include "grid.h"
-#include "maze.h"
-#include "lib/queue.h"
-#include "lib/list.h"
-#include "lib/vector.h"
-
-typedef struct router {
-    long xCost;
-    long yCost;
-    long zCost;
-    long bendCost;
-} router_t;
-
-typedef struct router_solve_arg {
-    router_t* routerPtr;
-    maze_t* mazePtr;
-    list_t* pathVectorListPtr;
-    pthread_mutex_t* queueLockPtr;
-    pthread_mutex_t* pathVectorListLockPtr;
-    vector_t* coordinateLocksVectorPtr;
-    pthread_t mainThreadId;
-} router_solve_arg_t;
+#include <math.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include "coordinate.h"
+#include "lib/pair.h"
+#include "lib/types.h"
 
 
 /* =============================================================================
- * router_alloc
+ * coordinate_alloc
  * =============================================================================
  */
-router_t* router_alloc (long xCost, long yCost, long zCost, long bendCost);
+coordinate_t* coordinate_alloc (long x, long y, long z){
+    coordinate_t* coordinatePtr;
+
+    coordinatePtr = (coordinate_t*)malloc(sizeof(coordinate_t));
+    if (coordinatePtr) {
+        coordinatePtr->x = x;
+        coordinatePtr->y = y;
+        coordinatePtr->z = z;
+    }
+
+    return coordinatePtr;
+}
 
 
 /* =============================================================================
- * router_free
+ * coordinate_free
  * =============================================================================
  */
-void router_free (router_t* routerPtr);
+void coordinate_free (coordinate_t* coordinatePtr){
+    free(coordinatePtr);
+}
 
 
 /* =============================================================================
- * router_solve
+ * coordinate_isEqual
  * =============================================================================
  */
-void* router_solve (void* argPtr);
+bool_t coordinate_isEqual (coordinate_t* aPtr, coordinate_t* bPtr){
+    if ((aPtr->x == bPtr->x) &&
+        (aPtr->y == bPtr->y) &&
+        (aPtr->z == bPtr->z))
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
 
 
-#endif /* ROUTER_H */
+/* =============================================================================
+ * getPairDistance
+ * =============================================================================
+ */
+static double getPairDistance (pair_t* pairPtr){
+    coordinate_t* aPtr = (coordinate_t*)pairPtr->firstPtr;
+    coordinate_t* bPtr = (coordinate_t*)pairPtr->secondPtr;
+    long dx = aPtr->x - bPtr->x;
+    long dy = aPtr->y - bPtr->y;
+    long dz = aPtr->z - bPtr->z;
+    long dx2 = dx * dx;
+    long dy2 = dy * dy;
+    long dz2 = dz * dz;
+    return sqrt((double)(dx2 + dy2 + dz2));
+}
+
+
+/* =============================================================================
+ * coordinate_comparePair
+ * -- For sorting in list of source/destination pairs
+ * -- Route longer paths first so they are more likely to succeed
+ * =============================================================================
+ */
+long coordinate_comparePair (const void* aPtr, const void* bPtr){
+    double aDistance = getPairDistance((pair_t*)aPtr);
+    double bDistance = getPairDistance((pair_t*)bPtr);
+
+    if (aDistance < bDistance) {
+        return 1;
+    } else if (aDistance > bDistance) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+/* =============================================================================
+ * coordinate_areAdjacent
+ * =============================================================================
+ */
+bool_t coordinate_areAdjacent (coordinate_t* aPtr, coordinate_t* bPtr){
+    long dx = aPtr->x - bPtr->x;
+    long dy = aPtr->y - bPtr->y;
+    long dz = aPtr->z - bPtr->z;
+    long dx2 = dx * dx;
+    long dy2 = dy * dy;
+    long dz2 = dz * dz;
+
+    return (((dx2 + dy2 + dz2) == 1) ? TRUE : FALSE);
+}
 
 
 /* =============================================================================
  *
- * End of router.h
+ * End of coordinate.c
  *
  * =============================================================================
  */

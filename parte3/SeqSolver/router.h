@@ -54,11 +54,9 @@
 #ifndef ROUTER_H
 #define ROUTER_H 1
 
-#include <pthread.h>
+
 #include "grid.h"
 #include "maze.h"
-#include "lib/queue.h"
-#include "lib/list.h"
 #include "lib/vector.h"
 
 typedef struct router {
@@ -72,10 +70,6 @@ typedef struct router_solve_arg {
     router_t* routerPtr;
     maze_t* mazePtr;
     list_t* pathVectorListPtr;
-    pthread_mutex_t* queueLockPtr;
-    pthread_mutex_t* pathVectorListLockPtr;
-    vector_t* coordinateLocksVectorPtr;
-    pthread_t mainThreadId;
 } router_solve_arg_t;
 
 
@@ -97,7 +91,7 @@ void router_free (router_t* routerPtr);
  * router_solve
  * =============================================================================
  */
-void* router_solve (void* argPtr);
+void router_solve (void* argPtr);
 
 
 #endif /* ROUTER_H */
