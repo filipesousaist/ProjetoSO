@@ -75,7 +75,6 @@ typedef struct router_solve_arg {
     pthread_mutex_t* queueLockPtr;
     pthread_mutex_t* pathVectorListLockPtr;
     vector_t* coordinateLocksVectorPtr;
-    pthread_t mainThreadId;
 } router_solve_arg_t;
 
 

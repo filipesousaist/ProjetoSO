@@ -41,7 +41,6 @@ int main(int argc, char const *argv[]) {
 	while (TRUE) {
 		if (fgets(command, MAX_FILENAME, stdin) == NULL)
 			displayError(ERR_LINEARGS);
-		printf("Li isto:\n%s", command);
 		write(fd, command, strlen(command));
 	}
 	return 0;

@@ -153,6 +153,11 @@ static char* parseArgs (long argc, char* const argv[]) {
     return argv[optind]; 
 }
 
+
+/* =============================================================================
+ * createCoordinateLocksVector
+ * =============================================================================
+ */
 static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
     long size = (gridPtr -> width) * (gridPtr -> height) * (gridPtr -> depth);
     vector_t* coordinateLocksVectorPtr = vector_alloc(size);
@@ -169,7 +174,10 @@ static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
     return coordinateLocksVectorPtr;
 }
 
-
+/* =============================================================================
+ * deleteCoordinateLocksVector
+ * =============================================================================
+ */
 static void deleteCoordinateLocksVector(vector_t* coordinateLocksVectorPtr) {
     long size = vector_getSize(coordinateLocksVectorPtr);
 
@@ -238,6 +246,9 @@ int main(int argc, char** argv) {
     list_t* pathVectorListPtr = list_alloc(NULL);
     assert(pathVectorListPtr);
 
+    TIMER_T startTime;
+    TIMER_READ(startTime);
+
     /* Creation of the locks */
     pthread_mutex_t* queueLockPtr = \
         (pthread_mutex_t*) malloc(sizeof(pthread_mutex_t));
@@ -256,8 +267,6 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    pthread_t mainThreadId = pthread_self();
-
     /* Creation of the structure to pass to each thread */
     router_solve_arg_t routerArg = { \
         routerPtr, \
@@ -265,12 +274,8 @@ int main(int argc, char** argv) {
         pathVectorListPtr, \
         queueLockPtr, \
         pathVectorListLockPtr, \
-        coordinateLocksVectorPtr, \
-        mainThreadId
+        coordinateLocksVectorPtr \
     };
-
-    TIMER_T startTime;
-    TIMER_READ(startTime);
     
     /* Initization of threads queue */
     queue_t* threadsQueuePtr = queue_alloc(global_params[PARAM_NUMTHREADS]);
@@ -289,8 +294,6 @@ int main(int argc, char** argv) {
             exit(1);
         }
     }
-
-    router_solve((void *) &routerArg);
 
     /* Wait for all threads */
     while (! queue_isEmpty(threadsQueuePtr)) {  
