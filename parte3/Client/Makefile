@@ -13,7 +13,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $(TARGET) $(LDFLAGS) 
 
-CircuitRouter-Client.o: CircuitRouter-Client.c ../lib/types.h
+CircuitRouter-Client.o: CircuitRouter-Client.c ../lib/buffers.h ../lib/types.h
 
 $(OBJS):
 	$(CC) $(CFLAGS) -c -o $@ $<

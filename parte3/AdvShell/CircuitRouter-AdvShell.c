@@ -11,23 +11,27 @@
 #include <unistd.h>
 #include "CircuitRouter-AdvShell.h"
 #include "../lib/commandlinereader.h"
+#include "../lib/buffers.h"
+#include "../lib/queue.h"
 #include "../lib/types.h"
 #include "../lib/vector.h"
-#include "../lib/queue.h"
-
 
 /* CONSTANTS */
 
-#define BUFFERSIZE 200
 #define PID_VECTOR_START 20
-#define SOLVER_NAME "CircuitRouter-SeqSolver"
-#define PIPE_NAME "CircuitRouter-AdvShell.pipe"
+#define SOLVER_NAME "CircuitRouter-ParSolver"
+#define NUM_THREADS 4
+#define MAX_N 10
+#define SHELL_PIPE_NAME "temp/CircuitRouter-AdvShell.pipe"
 
+typedef struct instruction {
+	char circuitName[CIRCUIT_MAX_NAME];
+	char clientPipeName[CLIENT_MAX_PIPE_NAME];
+} instruction_t;
 
 /* MACROS */
 
-#define TRY(EXPRESSION) if ((EXPRESSION) < 0) {perror(NULL); exit(1);}
-#define ASSERT(EXPRESSION) assert((EXPRESSION));
+#define TRY(EXPRESSION) {if ((EXPRESSION) < 0) {perror(NULL); exit(1);}}
 
 /* STATIC FUNCTIONS */
 
@@ -71,13 +75,16 @@ bool_t finished = FALSE;
  */
 int main(int argc, char const *argv[]) {
 	/* Initialize circuit-related variables */
-	ASSERT(instructionsQueuePtr = queue_alloc(-1));
+	instructionsQueuePtr = queue_alloc(-1);
+	assert(instructionsQueuePtr);
 	TRY(pthread_mutex_init(&instructionsMutex, NULL));
 	TRY(pthread_cond_init(&instructionsCond, NULL));
 
 	/* Initialize vectors to store the pid and exit status of each thread */
-	ASSERT(pidVector = vector_alloc(PID_VECTOR_START));
-	ASSERT(statusVector = vector_alloc(PID_VECTOR_START));
+	pidVector = vector_alloc(PID_VECTOR_START);
+	assert(pidVector);
+	statusVector = vector_alloc(PID_VECTOR_START);
+	assert(statusVector);
 
 	/* Check if program arguments are valid */
 	if (argc != 2 || sscanf(argv[1],"%ld", &maxChildren) != 1) {
@@ -115,7 +122,7 @@ int main(int argc, char const *argv[]) {
 	}
 
 	/* Clean up */
-	TRY(unlink(PIPE_NAME));
+	TRY(unlink(SHELL_PIPE_NAME));
 	TRY(pthread_mutex_destroy(&instructionsMutex));
 	TRY(pthread_cond_destroy(&instructionsCond));
 	queue_free(instructionsQueuePtr);
@@ -139,28 +146,41 @@ void shell_executeInstructions() {
 			-- numChildren;
 		}
 
-		/* Get next circuit name */
+		/* Get next circuit name */	
 		TRY(pthread_mutex_lock(&instructionsMutex));
 		while (numInstructions == 0)
 			TRY(pthread_cond_wait(&instructionsCond, &instructionsMutex));
-		char* instr = (char*) queue_pop(instructionsQueuePtr);
 		-- numInstructions;
+		instruction_t* instructionPtr = \
+			(instruction_t*) queue_pop(instructionsQueuePtr);
 		TRY(pthread_mutex_unlock(&instructionsMutex));
 
-		if (instr == NULL)
+		if (! instructionPtr)
 			return;
 
 		int pid;
 		if ((pid = fork()) == -1) { /* error creating child */
 			displayError(ERR_FORK);
-			free(instr);
+			free(instructionPtr);
 			continue;
 		}
-		else if (pid == 0) /* child process */
-			TRY(execl(SOLVER_NAME, SOLVER_NAME, instr, NULL));
+		else if (pid == 0) { /* child process */
+			char numThreadsStr[MAX_N];
+			sprintf(numThreadsStr, "%i", NUM_THREADS);
+
+			char* circName = instructionPtr->circuitName;
+			char* pipeName = instructionPtr->clientPipeName;
+			if (pipeName[0] == '\0') {
+				TRY(execl(SOLVER_NAME, SOLVER_NAME, circName, \
+					"-t", numThreadsStr, NULL));
+			}
+			else
+				TRY(execl(SOLVER_NAME, SOLVER_NAME, circName, \
+					"-t", numThreadsStr, "-p", pipeName, NULL));
+		}
 		/* parent process */
 		++ numChildren;
-		free(instr);
+		free(instructionPtr);
 	}
 }
 
@@ -170,18 +190,19 @@ void shell_executeInstructions() {
  * =============================================================================
  */
 void* shell_manageStdin(void* args) {
-	char buffer[BUFFERSIZE];
+	char buffer[COMMAND_MAX_SIZE];
 	char* argVector[3];
 
 	while (TRUE) {
-		if (readLineArguments(argVector, 3, buffer, BUFFERSIZE, NULL) == -1)
+		if (readLineArguments(argVector, 3, buffer, COMMAND_MAX_SIZE, NULL) \
+			== -1)
 			displayError(ERR_LINEARGS);		
 		else if (argVector[0] == NULL)
 			displayError(ERR_COMMANDS);
 		else if (strcmp(argVector[0], "run") == 0 && argVector[1] != NULL)
-			shell_pushInstruction(argVector[1]);
+			shell_pushInstruction(argVector[1], NULL);
 		else if (strcmp(argVector[0], "exit") == 0)	{
-			shell_pushInstruction(NULL);
+			shell_pushInstruction(NULL, NULL);
 			pthread_exit(NULL);
 		}
 		else /* invalid command */
@@ -196,37 +217,66 @@ void* shell_manageStdin(void* args) {
  */
 void* shell_managePipe(void* argPtr) {
 	/* Delete pipe if it exists */
-	int result = access(PIPE_NAME, F_OK);
+	int result = access(SHELL_PIPE_NAME, F_OK);
 	if (errno != 0 && errno != ENOENT) {
 		perror("access");
 		exit(1);
 	}
 	else if (result == 0)
-		TRY(unlink(PIPE_NAME));
+		TRY(unlink(SHELL_PIPE_NAME));
 
 	/* Create and open pipe */
-	TRY(mkfifo(PIPE_NAME, 0755));
-	int fd;
-	TRY(fd = open(PIPE_NAME, O_RDONLY));
+	TRY(mkfifo(SHELL_PIPE_NAME, 0600));
 
-	char command[BUFFERSIZE];
-	char buffer[BUFFERSIZE];
-	char* argVector[3];
+	char message[MESSAGE_MAX_SIZE];
+	char buffer[MESSAGE_MAX_SIZE];
+	char* argVector[4];
 
 	while (TRUE) {
-		read(fd, command, BUFFERSIZE);
-		if (readLineArguments(argVector, 3, buffer, BUFFERSIZE, command) == -1) {
-			displayError(ERR_LINEARGS);
-			continue;
-		}
+		int fd;
+		TRY(fd = open(SHELL_PIPE_NAME, O_RDONLY));
+		TRY(read(fd, message, MESSAGE_MAX_SIZE));
+		TRY(close(fd));
+		
+		if (readLineArguments(argVector, 4, buffer, MESSAGE_MAX_SIZE, \
+			message) != -1 \
+			&& strcmp(argVector[1], "run") == 0 \
+			&& argVector[2] != NULL)
 
-		if (strcmp(argVector[0], "run") == 0 && argVector[1] != NULL)
-			shell_pushInstruction(argVector[1]);
-		else {
-			displayError(ERR_COMMANDS); /* invalid command */
-			continue;
+			shell_pushInstruction(argVector[2], argVector[0]);
+		else { /* Invalid command */
+			int clientFd;
+			TRY(clientFd = open(argVector[0], O_WRONLY));
+			char messageToClient[] = "Command not supported.";
+			TRY(write(clientFd, messageToClient, strlen(messageToClient)));
+			TRY(close(clientFd));
 		}
 	}
+}
+
+
+/* =============================================================================
+ * shell_pushInstuction
+ * =============================================================================
+ */
+void shell_pushInstruction(char* circuitName, char* clientPipeName) {
+	instruction_t* newInstrPtr = (instruction_t*) malloc(sizeof(instruction_t));
+
+	if (circuitName) {
+		strcpy(newInstrPtr->circuitName, circuitName);
+		if (clientPipeName)
+			strcpy(newInstrPtr->clientPipeName, clientPipeName);
+		else
+			(newInstrPtr->clientPipeName)[0] = '\0';
+	}
+	else
+		newInstrPtr = NULL;
+	
+	TRY(pthread_mutex_lock(&instructionsMutex));
+	queue_push(instructionsQueuePtr, (void*) newInstrPtr);
+	numInstructions ++;
+	pthread_cond_signal(&instructionsCond);
+	TRY(pthread_mutex_unlock(&instructionsMutex));
 }
 
 
@@ -244,25 +294,4 @@ void shell_waitNext()
 	TRY(*pidPtr = wait(statusPtr));
 	vector_pushBack(pidVector, pidPtr);
 	vector_pushBack(statusVector, statusPtr);
-}
-
-
-/* =============================================================================
- * shell_pushInstuction
- * =============================================================================
- */
-void shell_pushInstruction(char* instr) {
-	char* newInstr;
-	if (instr) {
-		newInstr = (char*) malloc((strlen(instr) + 1) * sizeof(char));
-		strcpy(newInstr, instr);
-	}
-	else
-		newInstr = NULL;
-	
-	TRY(pthread_mutex_lock(&instructionsMutex));
-	queue_push(instructionsQueuePtr, (void*) newInstr);
-	numInstructions ++;
-	pthread_cond_signal(&instructionsCond);
-	TRY(pthread_mutex_unlock(&instructionsMutex));
 }

@@ -1,0 +1,10 @@
+#ifndef BUFFERS_H
+#define BUFFERS_H 1
+
+#define CLIENT_MAX_PIPE_NAME 100
+#define SHELL_MAX_PIPE_NAME 100
+#define CIRCUIT_MAX_NAME 200
+#define COMMAND_MAX_SIZE 250
+#define MESSAGE_MAX_SIZE 350
+
+#endif

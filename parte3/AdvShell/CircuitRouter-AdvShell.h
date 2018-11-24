@@ -6,7 +6,6 @@ enum {
 	ERR_COMMANDS,
 	ERR_FORK
 };
-
 /* =============================================================================
  * shell_executeInstructions
  * =============================================================================
@@ -29,7 +28,7 @@ void* shell_managePipe(void* argPtr);
  * shell_pushInstruction
  * =============================================================================
  */
-void shell_pushInstruction(char* circuitName);
+void shell_pushInstruction(char* circuitName, char* clientPipeName);
 
 /* =============================================================================
  * shell_waitNext

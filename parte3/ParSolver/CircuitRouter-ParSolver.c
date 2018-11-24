@@ -52,16 +52,20 @@
 
 
 #include <assert.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
 #include "lib/list.h"
 #include "maze.h"
 #include "router.h"
 #include "thread.h"
+#include "lib/buffers.h"
 #include "lib/timer.h"
 #include "lib/types.h"
 
@@ -72,7 +76,8 @@ enum param_types {
     PARAM_XCOST      = (unsigned char)'x',
     PARAM_YCOST      = (unsigned char)'y',
     PARAM_ZCOST      = (unsigned char)'z',
-    PARAM_NUMTHREADS = (unsigned char)'t'
+    PARAM_NUMTHREADS = (unsigned char)'t',
+    PARAM_USEPIPES =   (unsigned char)'p'
 };
 
 enum param_defaults {
@@ -80,12 +85,13 @@ enum param_defaults {
     PARAM_DEFAULT_XCOST      = 1,
     PARAM_DEFAULT_YCOST      = 1,
     PARAM_DEFAULT_ZCOST      = 2,
-    PARAM_DEFAULT_NUMTHREADS = -1
+    PARAM_DEFAULT_NUMTHREADS = -1,
+    PARAM_DEFAULT_USEPIPES   = 0
 };
 
 char* global_inputFile = NULL;
 long global_params[256]; /* 256 = ascii limit */
-
+char global_clientPipeName[CLIENT_MAX_PIPE_NAME];
 
 /* =============================================================================
  * displayUsage
@@ -114,6 +120,7 @@ static void setDefaultParams (){
     global_params[PARAM_YCOST]      = PARAM_DEFAULT_YCOST;
     global_params[PARAM_ZCOST]      = PARAM_DEFAULT_ZCOST;
     global_params[PARAM_NUMTHREADS] = PARAM_DEFAULT_NUMTHREADS;
+    global_params[PARAM_USEPIPES]   = PARAM_DEFAULT_USEPIPES;
 }
 
 
@@ -129,14 +136,18 @@ static char* parseArgs (long argc, char* const argv[]) {
 
     setDefaultParams();
 
-    while ((opt = getopt(argc, argv, "hb:x:y:z:t:")) != -1) {
+    while ((opt = getopt(argc, argv, "hb:x:y:z:t:p:")) != -1) {
         switch (opt) {
             case 'b':
             case 'x':
             case 'y':
             case 'z':
             case 't':
-                global_params[(unsigned char)opt] = atol(optarg);
+                global_params[(unsigned char) opt] = atol(optarg);
+                break;
+            case 'p':
+                global_params[PARAM_USEPIPES] = 1;
+                strcpy(global_clientPipeName, optarg);
                 break;
             case '?':
             case 'h':
@@ -146,7 +157,7 @@ static char* parseArgs (long argc, char* const argv[]) {
         }
     }
 
-    if (opterr || global_params['t'] <= 0) {
+    if (opterr || global_params[PARAM_NUMTHREADS] <= 0) {
         displayUsage(argv[0]);
     }
 
@@ -378,6 +389,24 @@ int main(int argc, char** argv) {
         vector_free(pathVectorPtr);
     }
     list_free(pathVectorListPtr);
+
+    /* Send message back to client */
+    if (global_params[PARAM_USEPIPES] == 1) {
+        int clientPipeFd;
+        if ((clientPipeFd = open(global_clientPipeName, O_WRONLY)) < 0) {
+            perror("open");
+            exit(1);
+        }
+        char messageToClient[] = "Circuit solved";
+        if (write(clientPipeFd, messageToClient, strlen(messageToClient)) < 0) {
+            perror("write");
+            exit(1);
+        }
+        if (close(clientPipeFd) != 0) {
+            perror("close");
+            exit(1);
+        }
+    }
 
     exit(0);
 }

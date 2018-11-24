@@ -14,7 +14,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $(TARGET) $(LDFLAGS) 
 
-CircuitRouter-ParSolver.o: CircuitRouter-ParSolver.c maze.h router.h ../lib/list.h ../lib/timer.h ../lib/types.h
+CircuitRouter-ParSolver.o: CircuitRouter-ParSolver.c maze.h router.h ../lib/buffers.h ../lib/list.h ../lib/timer.h ../lib/types.h
 router.o: router.c router.h coordinate.h grid.h thread.h ../lib/queue.h ../lib/vector.h
 maze.o: maze.c maze.h coordinate.h grid.h ../lib/list.h ../lib/queue.h ../lib/pair.h ../lib/types.h ../lib/vector.h
 grid.o: grid.c grid.h coordinate.h ../lib/types.h ../lib/vector.h
