@@ -22,7 +22,9 @@
 #define SOLVER_NAME "CircuitRouter-ParSolver"
 #define NUM_THREADS 4
 #define MAX_N 10
-#define SHELL_PIPE_NAME "temp/CircuitRouter-AdvShell.pipe"
+#define SHELL_PIPE_NAME "/tmp/CircuitRouter-AdvShell.pipe"
+
+#define INSTRUCTION_EXIT NULL
 
 typedef struct instruction {
 	char circuitName[CIRCUIT_MAX_NAME];
@@ -87,7 +89,8 @@ int main(int argc, char const *argv[]) {
 	assert(statusVector);
 
 	/* Check if program arguments are valid */
-	if (argc != 2 || sscanf(argv[1],"%ld", &maxChildren) != 1) {
+	if ((argc != 1  && argc != 2) ||
+		(argc == 2 && sscanf(argv[1],"%ld", &maxChildren) != 1)) {
 		fputs("Invalid arguments\n", stderr);
 		exit(1);
 	}
@@ -155,7 +158,7 @@ void shell_executeInstructions() {
 			(instruction_t*) queue_pop(instructionsQueuePtr);
 		TRY(pthread_mutex_unlock(&instructionsMutex));
 
-		if (! instructionPtr)
+		if (instructionPtr == INSTRUCTION_EXIT)
 			return;
 
 		int pid;
@@ -202,7 +205,7 @@ void* shell_manageStdin(void* args) {
 		else if (strcmp(argVector[0], "run") == 0 && argVector[1] != NULL)
 			shell_pushInstruction(argVector[1], NULL);
 		else if (strcmp(argVector[0], "exit") == 0)	{
-			shell_pushInstruction(NULL, NULL);
+			shell_pushInstruction(INSTRUCTION_EXIT, NULL);
 			pthread_exit(NULL);
 		}
 		else /* invalid command */
@@ -237,7 +240,7 @@ void* shell_managePipe(void* argPtr) {
 		TRY(fd = open(SHELL_PIPE_NAME, O_RDONLY));
 		TRY(read(fd, message, MESSAGE_MAX_SIZE));
 		TRY(close(fd));
-		
+
 		if (readLineArguments(argVector, 4, buffer, MESSAGE_MAX_SIZE, \
 			message) != -1 \
 			&& strcmp(argVector[1], "run") == 0 \
@@ -270,7 +273,7 @@ void shell_pushInstruction(char* circuitName, char* clientPipeName) {
 			(newInstrPtr->clientPipeName)[0] = '\0';
 	}
 	else
-		newInstrPtr = NULL;
+		newInstrPtr = INSTRUCTION_EXIT;
 	
 	TRY(pthread_mutex_lock(&instructionsMutex));
 	queue_push(instructionsQueuePtr, (void*) newInstrPtr);
