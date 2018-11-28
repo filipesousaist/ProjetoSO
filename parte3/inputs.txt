@@ -4,6 +4,8 @@ run inputs/random-x128-y128-z5-n128.txt
 run inputs/random-x32-y32-z3-n64.txt
 run inputs/random-x32-y32-z3-n96.txt
 run inputs/random-x48-y48-z3-n48.txt
+run inputs/random-x256-y256-z3-n256.txt
 run inputs/random-x48-y48-z3-n64.txt
 run inputs/random-x64-y64-z3-n48.txt
 run inputs/random-x64-y64-z3-n64.txt
+exit

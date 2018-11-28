@@ -13,6 +13,12 @@ enum {
 void shell_executeInstructions();
 
 /* =============================================================================
+ * shell_manageSignals
+ * =============================================================================
+ */
+void* shell_manageSignals(void* argPtr);
+
+/* =============================================================================
  * shell_manageStdin
  * =============================================================================
  */
@@ -31,10 +37,16 @@ void* shell_managePipe(void* argPtr);
 void shell_pushInstruction(char* circuitName, char* clientPipeName);
 
 /* =============================================================================
- * shell_waitNext
+ * shell_waitForAll
  * =============================================================================
  */
-void shell_waitNext();
+void shell_waitForAll();
+
+/* =============================================================================
+ * shell_signalHandler
+ * =============================================================================
+ */
+void shell_signalHandler(int sig);
 
 #endif /* CIRCUITROUTER_ADVSHELL_H */
 

@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include "CircuitRouter-AdvShell.h"
+#include "../lib/clock.h"
 #include "../lib/commandlinereader.h"
 #include "../lib/buffers.h"
 #include "../lib/queue.h"
@@ -30,6 +32,13 @@ typedef struct instruction {
 	char circuitName[CIRCUIT_MAX_NAME];
 	char clientPipeName[CLIENT_MAX_PIPE_NAME];
 } instruction_t;
+
+typedef struct processData {
+	pid_t pid;
+	int status;
+	TIME_T startTime;
+	TIME_T finishTime;
+} processData_t;
 
 /* MACROS */
 
@@ -58,17 +67,22 @@ static void displayError(int code) {
 /* GLOBAL VARIABLES */
 
 long maxChildren = -1; /* -1 means no limit of child processes */
-long numChildren = 0;
+long startedChildren = 0;
+long finishedChildren = 0;
+pthread_mutex_t numChildrenMutex;
+pthread_cond_t numChildrenCond;
 
 int numInstructions = 0;
 queue_t* instructionsQueuePtr;
 pthread_mutex_t instructionsMutex;
 pthread_cond_t instructionsCond;
 
-vector_t* pidVector;
-vector_t* statusVector;
+vector_t* processDataVectorPtr;
 
-bool_t finished = FALSE;
+CLOCK_T mainClock;
+TIME_T globalFinishTime;
+
+sigset_t childSigSet; /* Auxiliary set which will only contain SIGCHLD */
 
 
 /* =============================================================================
@@ -83,10 +97,9 @@ int main(int argc, char const *argv[]) {
 	TRY(pthread_cond_init(&instructionsCond, NULL));
 
 	/* Initialize vectors to store the pid and exit status of each thread */
-	pidVector = vector_alloc(PID_VECTOR_START);
-	assert(pidVector);
-	statusVector = vector_alloc(PID_VECTOR_START);
-	assert(statusVector);
+	processDataVectorPtr = vector_alloc(PID_VECTOR_START);
+	assert(processDataVectorPtr);
+
 
 	/* Check if program arguments are valid */
 	if ((argc != 1  && argc != 2) ||
@@ -94,6 +107,16 @@ int main(int argc, char const *argv[]) {
 		fputs("Invalid arguments\n", stderr);
 		exit(1);
 	}
+
+	/* Block signals from children; all "child" threads will inherit this 
+	behaviour */
+	TRY(sigemptyset(&childSigSet));
+	TRY(sigaddset(&childSigSet, SIGCHLD));
+	TRY(pthread_sigmask(SIG_BLOCK, &childSigSet, NULL));
+
+	/* Create a thread to manage signals */
+	pthread_t signalsThread;
+	TRY(pthread_create(&signalsThread, NULL, &shell_manageSignals, NULL));
 
 	/* Create a thread to manage inputs from stdin */
 	pthread_t stdinThread;
@@ -107,21 +130,21 @@ int main(int argc, char const *argv[]) {
 	shell_executeInstructions();
 
 	/* Wait for all children to finish */
-	while ((numChildren --) > 0)
-		shell_waitNext(pidVector, statusVector);
+	shell_waitForAll();
 	
 	/* Print exit status for all children */
-	pid_t* pidPtr;
-	int* statusPtr; /* process exit status */	
-	while ((pidPtr = (pid_t*) vector_popBack(pidVector)) != NULL) {
-		statusPtr = (int*) vector_popBack(statusVector);
-		printf("CHILD EXITED (PID=%li; ", (long) *pidPtr);
-		if (exitedNormally(*statusPtr))
-			puts("return OK)");
-		else
-			puts("return NOK)");
-		free(pidPtr);
-		free(statusPtr);
+	while (vector_getSize(processDataVectorPtr) > 0) {
+		processData_t* dataPtr = \
+			(processData_t*) vector_popBack(processDataVectorPtr);
+
+		char* statusStr = (exitedNormally(dataPtr->status) ? "OK" : "NOK");
+		double timeDiff = \
+			TIME_DIFF_SECONDS(dataPtr->startTime, dataPtr->finishTime);
+
+		printf("CHILD EXITED (PID=%li; return %s; %lf s)\n", \
+				(long) dataPtr->pid, statusStr, timeDiff);
+
+		free(dataPtr);
 	}
 
 	/* Clean up */
@@ -129,8 +152,7 @@ int main(int argc, char const *argv[]) {
 	TRY(pthread_mutex_destroy(&instructionsMutex));
 	TRY(pthread_cond_destroy(&instructionsCond));
 	queue_free(instructionsQueuePtr);
-	vector_free(pidVector);
-	vector_free(statusVector);
+	vector_free(processDataVectorPtr);
 
 	puts("END.");
 
@@ -144,9 +166,11 @@ int main(int argc, char const *argv[]) {
  */
 void shell_executeInstructions() {
 	while (TRUE) {
-		if (numChildren == maxChildren) { /* wait for next children to finish */
-			shell_waitNext(pidVector, statusVector);
-			-- numChildren;
+		if (maxChildren != -1) { /* There is a maximum number of children */
+			TRY(pthread_mutex_lock(&numChildrenMutex));
+			while (startedChildren - finishedChildren >= maxChildren)
+				TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
+			TRY(pthread_mutex_unlock(&numChildrenMutex));
 		}
 
 		/* Get next circuit name */	
@@ -181,9 +205,39 @@ void shell_executeInstructions() {
 				TRY(execl(SOLVER_NAME, SOLVER_NAME, circName, \
 					"-t", numThreadsStr, "-p", pipeName, NULL));
 		}
-		/* parent process */
-		++ numChildren;
-		free(instructionPtr);
+		else { /* parent process */
+			/* Create process data */
+			processData_t* dataPtr = \
+				(processData_t*) malloc(sizeof(processData_t));
+			dataPtr->pid = pid;
+			CLOCK_READ(mainClock, &(dataPtr->startTime));
+			vector_pushBack(processDataVectorPtr, dataPtr);
+
+			++ startedChildren;
+
+			free(instructionPtr);
+		}
+	}
+}
+
+
+/* =============================================================================
+ * shell_manageSignals
+ * =============================================================================
+ */
+void* shell_manageSignals(void* args) {
+	struct sigaction action;
+	action.sa_handler = &shell_signalHandler;
+	TRY(sigaction(SIGCHLD, &action, NULL));
+
+	/* This thread will listen to signals from children */
+	TRY(pthread_sigmask(SIG_UNBLOCK, &childSigSet, NULL));
+
+	while (TRUE) {
+		pause();
+		pthread_mutex_lock(&numChildrenMutex);
+		pthread_cond_signal(&numChildrenCond);
+		pthread_mutex_unlock(&numChildrenMutex);
 	}
 }
 
@@ -206,6 +260,12 @@ void* shell_manageStdin(void* args) {
 			shell_pushInstruction(argVector[1], NULL);
 		else if (strcmp(argVector[0], "exit") == 0)	{
 			shell_pushInstruction(INSTRUCTION_EXIT, NULL);
+
+			/*TRY(pthread_mutex_lock(&numChildrenMutex));
+			finished = TRUE;
+			TRY(pthread_cond_signal(&numChildrenCond));
+			TRY(pthread_mutex_unlock(&numChildrenMutex));*/
+
 			pthread_exit(NULL);
 		}
 		else /* invalid command */
@@ -237,6 +297,7 @@ void* shell_managePipe(void* argPtr) {
 
 	while (TRUE) {
 		int fd;
+		bzero(message, MESSAGE_MAX_SIZE);
 		TRY(fd = open(SHELL_PIPE_NAME, O_RDONLY));
 		TRY(read(fd, message, MESSAGE_MAX_SIZE));
 		TRY(close(fd));
@@ -287,14 +348,41 @@ void shell_pushInstruction(char* circuitName, char* clientPipeName) {
  * shell_waitNext
  * =============================================================================
  */
-void shell_waitNext()
+void shell_waitForAll()
 {
-	pid_t* pidPtr = (pid_t *) malloc(sizeof(pid_t));
-	assert(pidPtr);
-	int* statusPtr = (int *) malloc(sizeof(int));
-	assert(statusPtr);
+	TRY(pthread_mutex_lock(&numChildrenMutex));
+	while (startedChildren > finishedChildren)
+		TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
+	TRY(pthread_mutex_unlock(&numChildrenMutex));
+}
 
-	TRY(*pidPtr = wait(statusPtr));
-	vector_pushBack(pidVector, pidPtr);
-	vector_pushBack(statusVector, statusPtr);
+
+/* =============================================================================
+ * shell_signalHandler
+ * =============================================================================
+ */
+void shell_signalHandler(int sig) {
+	CLOCK_READ(mainClock, &globalFinishTime);
+
+	/* Check which processes might have ended */
+	pid_t pid;
+	int status;
+	
+	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {	
+		/* Search for process data in the vector */
+		processData_t* processDataPtr;
+		for (int i = 0; ; i ++) {
+			processDataPtr = \
+				(processData_t*) vector_at(processDataVectorPtr, i);
+			if (processDataPtr->pid == pid)
+				break;
+		}
+		processDataPtr->status = status;
+		processDataPtr->finishTime = globalFinishTime;
+
+		finishedChildren ++;
+	}
+	if (pid < 0 && errno != ECHILD)
+		_exit(1);
+	/* Else, result was 0 or ECHILD -> no more children left to wait for */
 }
