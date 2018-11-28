@@ -69,6 +69,7 @@ static void displayError(int code) {
 long maxChildren = -1; /* -1 means no limit of child processes */
 long startedChildren = 0;
 long finishedChildren = 0;
+long auxFinishedChildren = 0;
 pthread_mutex_t numChildrenMutex;
 pthread_cond_t numChildrenCond;
 
@@ -222,27 +223,6 @@ void shell_executeInstructions() {
 
 
 /* =============================================================================
- * shell_manageSignals
- * =============================================================================
- */
-void* shell_manageSignals(void* args) {
-	struct sigaction action;
-	action.sa_handler = &shell_signalHandler;
-	TRY(sigaction(SIGCHLD, &action, NULL));
-
-	/* This thread will listen to signals from children */
-	TRY(pthread_sigmask(SIG_UNBLOCK, &childSigSet, NULL));
-
-	while (TRUE) {
-		pause();
-		pthread_mutex_lock(&numChildrenMutex);
-		pthread_cond_signal(&numChildrenCond);
-		pthread_mutex_unlock(&numChildrenMutex);
-	}
-}
-
-
-/* =============================================================================
  * shell_manageStdin
  * =============================================================================
  */
@@ -260,12 +240,6 @@ void* shell_manageStdin(void* args) {
 			shell_pushInstruction(argVector[1], NULL);
 		else if (strcmp(argVector[0], "exit") == 0)	{
 			shell_pushInstruction(INSTRUCTION_EXIT, NULL);
-
-			/*TRY(pthread_mutex_lock(&numChildrenMutex));
-			finished = TRUE;
-			TRY(pthread_cond_signal(&numChildrenCond));
-			TRY(pthread_mutex_unlock(&numChildrenMutex));*/
-
 			pthread_exit(NULL);
 		}
 		else /* invalid command */
@@ -320,6 +294,62 @@ void* shell_managePipe(void* argPtr) {
 
 
 /* =============================================================================
+ * shell_manageSignals
+ * =============================================================================
+ */
+void* shell_manageSignals(void* args) {
+	/* Replace signal handler for SIGCHLD */
+	struct sigaction action;
+	action.sa_handler = &shell_signalHandler;
+	TRY(sigaction(SIGCHLD, &action, NULL));
+
+	/* Unblock signals from children */
+	TRY(pthread_sigmask(SIG_UNBLOCK, &childSigSet, NULL));
+
+	while (TRUE) {
+		pause(); /* Allow other threads to get CPU time while no signals come */
+		pthread_mutex_lock(&numChildrenMutex);
+		finishedChildren = auxFinishedChildren;
+		pthread_cond_signal(&numChildrenCond);
+		pthread_mutex_unlock(&numChildrenMutex);
+	}
+}
+
+
+/* =============================================================================
+ * shell_signalHandler
+ * =============================================================================
+ */
+void shell_signalHandler(int sig) {
+	CLOCK_READ(mainClock, &globalFinishTime);
+
+	/* Check which processes might have ended */
+	pid_t pid;
+	int status;	
+	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {	
+		/* Search for process data in the vector */
+		processData_t* processDataPtr;
+		for (int i = 0; ; i ++) {
+			processDataPtr = \
+				(processData_t*) vector_at(processDataVectorPtr, i);
+			if (processDataPtr->pid == pid)
+				break;
+		}
+		processDataPtr->status = status;
+		processDataPtr->finishTime = globalFinishTime;
+
+		auxFinishedChildren ++;
+	}
+	if (pid < 0 && errno != ECHILD) {
+		char errorMessage[] = "Error: waitpid";
+		write(1, errorMessage, sizeof(errorMessage));
+		_exit(1);
+	}
+	/* Else, result was 0 or ECHILD -> no more children left to wait for */
+}
+
+
+/* =============================================================================
  * shell_pushInstuction
  * =============================================================================
  */
@@ -354,35 +384,4 @@ void shell_waitForAll()
 	while (startedChildren > finishedChildren)
 		TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
 	TRY(pthread_mutex_unlock(&numChildrenMutex));
-}
-
-
-/* =============================================================================
- * shell_signalHandler
- * =============================================================================
- */
-void shell_signalHandler(int sig) {
-	CLOCK_READ(mainClock, &globalFinishTime);
-
-	/* Check which processes might have ended */
-	pid_t pid;
-	int status;
-	
-	while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {	
-		/* Search for process data in the vector */
-		processData_t* processDataPtr;
-		for (int i = 0; ; i ++) {
-			processDataPtr = \
-				(processData_t*) vector_at(processDataVectorPtr, i);
-			if (processDataPtr->pid == pid)
-				break;
-		}
-		processDataPtr->status = status;
-		processDataPtr->finishTime = globalFinishTime;
-
-		finishedChildren ++;
-	}
-	if (pid < 0 && errno != ECHILD)
-		_exit(1);
-	/* Else, result was 0 or ECHILD -> no more children left to wait for */
 }
