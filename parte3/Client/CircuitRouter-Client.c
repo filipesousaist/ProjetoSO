@@ -51,10 +51,10 @@ int main(int argc, char const *argv[]) {
 			
 			TRY(write(shellPipeFd, message, strlen(message)));
 
-			/* Recieve message */
-			TRY(clientPipeFd = open(clientPipeName, O_RDONLY));
+			/* Recieve message */	
 			char response[MESSAGE_MAX_SIZE];
 			bzero(response, MESSAGE_MAX_SIZE);
+			TRY(clientPipeFd = open(clientPipeName, O_RDONLY));
 			TRY(read(clientPipeFd, response, MESSAGE_MAX_SIZE));
 			TRY(close(clientPipeFd));
 
