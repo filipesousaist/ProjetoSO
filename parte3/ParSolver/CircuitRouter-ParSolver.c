@@ -71,6 +71,8 @@
 
 #define NUM_CHARS_EXT 4
 
+#define TRY(EXPRESSION) {if ((EXPRESSION) < 0) {perror(NULL); exit(1);}}
+
 enum param_types {
     PARAM_BENDCOST   = (unsigned char)'b',
     PARAM_XCOST      = (unsigned char)'x',
@@ -175,10 +177,7 @@ static vector_t* createCoordinateLocksVector(grid_t* gridPtr) {
 
     for (long i = 0; i < size; ++ i) {
         pthread_mutex_t* newLock = malloc(sizeof(pthread_mutex_t));
-        if (pthread_mutex_init(newLock, NULL) != 0) {
-            perror("pthread_mutex_init");
-            exit(1);
-        }
+        TRY(pthread_mutex_init(newLock, NULL));
         vector_pushBack(coordinateLocksVectorPtr, (void*) newLock);
     }
 
@@ -195,10 +194,7 @@ static void deleteCoordinateLocksVector(vector_t* coordinateLocksVectorPtr) {
     for (long i = 0; i < size; ++ i) {
         pthread_mutex_t* curLock = (pthread_mutex_t*) \
             vector_popBack(coordinateLocksVectorPtr);
-        if (pthread_mutex_destroy(curLock) != 0) {
-            perror("pthread_mutex_destroy");
-            exit(1);
-        }
+        TRY(pthread_mutex_destroy(curLock));
         free(curLock);
     }
 
@@ -232,10 +228,7 @@ int main(int argc, char** argv) {
         assert(oldFileName);
         sprintf(oldFileName, "%s.old", outputFileName);
 
-        if (rename(outputFileName, oldFileName) == -1) {
-            perror("rename");
-            exit(1);
-        }
+        TRY(rename(outputFileName, oldFileName));
         free(oldFileName);
     }
 
@@ -272,11 +265,8 @@ int main(int argc, char** argv) {
     assert(coordinateLocksVectorPtr);
 
     /* Initialization of the locks */
-    if (pthread_mutex_init(queueLockPtr, NULL) != 0 || \
-        pthread_mutex_init(pathVectorListLockPtr, NULL) != 0) {
-        perror("pthread_mutex_init");
-        exit(1);
-    }
+    TRY(pthread_mutex_init(queueLockPtr, NULL));
+    TRY(pthread_mutex_init(pathVectorListLockPtr, NULL));
 
     /* Creation of the structure to pass to each thread */
     router_solve_arg_t routerArg = { \
@@ -330,19 +320,14 @@ int main(int argc, char** argv) {
                 long* gridPointPtr = (long*) vector_at(curPointVectorPtr, pnt);
                 pthread_mutex_t* lock = (pthread_mutex_t*) vector_at( \
                     coordinateLocksVectorPtr, gridPointPtr - mazePtr->gridPtr->points);
-                if (pthread_mutex_unlock(lock) != 0) {
-                    perror("pthread_mutex_unlock");
-                    exit(1);
-                }
+                TRY(pthread_mutex_unlock(lock));
             }
         }
     }
     /* Free memory and destroy locks */
-    if (pthread_mutex_destroy(queueLockPtr) != 0 || \
-        pthread_mutex_destroy(pathVectorListLockPtr) != 0){
-        perror("pthread_mutex_destroy");
-        exit(1);
-    } 
+    TRY(pthread_mutex_destroy(queueLockPtr));
+    TRY(pthread_mutex_destroy(pathVectorListLockPtr));
+    
     deleteCoordinateLocksVector(coordinateLocksVectorPtr);
     free(queueLockPtr);
     free(pathVectorListLockPtr);
@@ -393,19 +378,10 @@ int main(int argc, char** argv) {
     /* Send message back to client */
     if (global_params[PARAM_USEPIPES] == 1) {
         int clientPipeFd;
-        if ((clientPipeFd = open(global_clientPipeName, O_WRONLY)) < 0) {
-            perror("open");
-            exit(1);
-        }
+        TRY(clientPipeFd = open(global_clientPipeName, O_WRONLY));
         char messageToClient[] = "Circuit solved";
-        if (write(clientPipeFd, messageToClient, strlen(messageToClient)) < 0) {
-            perror("write");
-            exit(1);
-        }
-        if (close(clientPipeFd) != 0) {
-            perror("close");
-            exit(1);
-        }
+        TRY(write(clientPipeFd, messageToClient, strlen(messageToClient)));
+        TRY(close(clientPipeFd));
     }
 
     exit(0);
