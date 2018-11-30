@@ -67,7 +67,9 @@ static void displayError(int code) {
 /* GLOBAL VARIABLES */
 
 long maxChildren = -1; /* -1 means no limit of child processes */
-volatile sig_atomic_t runningChlidren = 0;
+long startedChildren = 0;
+long finishedChildren = 0;
+long auxFinishedChildren = 0;
 pthread_mutex_t numChildrenMutex;
 pthread_cond_t numChildrenCond;
 
@@ -165,14 +167,13 @@ int main(int argc, char const *argv[]) {
  */
 void shell_executeInstructions() {
 	while (TRUE) {
-		if (maxChildren != -1) { /* There is a maximum number of children */
-			TRY(pthread_mutex_lock(&numChildrenMutex));
-			while (runningChlidren == maxChildren)
-				TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
-			TRY(pthread_mutex_unlock(&numChildrenMutex));
-		}
+		/* If number of children reached its limit, wait */
+		TRY(pthread_mutex_lock(&numChildrenMutex));
+		while (startedChildren - finishedChildren == maxChildren)
+			TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
+		TRY(pthread_mutex_unlock(&numChildrenMutex));
 
-		/* Get next circuit name */	
+		/* Get next instruction */	
 		TRY(pthread_mutex_lock(&instructionsMutex));
 		while (numInstructions == 0)
 			TRY(pthread_cond_wait(&instructionsCond, &instructionsMutex));
@@ -184,6 +185,7 @@ void shell_executeInstructions() {
 		if (instructionPtr == INSTRUCTION_EXIT)
 			return;
 
+		/* Create child process */
 		int pid;
 		if ((pid = fork()) == -1) { /* error creating child */
 			displayError(ERR_FORK);
@@ -205,15 +207,16 @@ void shell_executeInstructions() {
 					"-t", numThreadsStr, "-p", pipeName, NULL));
 		}
 		else { /* parent process */
-			/* Create process data */
+			/* Create child process data */
 			processData_t* dataPtr = \
 				(processData_t*) malloc(sizeof(processData_t));
 			dataPtr->pid = pid;
 			CLOCK_READ(mainClock, &(dataPtr->startTime));
 			vector_pushBack(processDataVectorPtr, dataPtr);
 
-			/*++ startedChildren;*/
-			runningChlidren ++;
+			pthread_mutex_lock(&numChildrenMutex);
+			startedChildren ++;
+			pthread_mutex_unlock(&numChildrenMutex);
 
 			free(instructionPtr);
 		}
@@ -302,14 +305,18 @@ void* shell_manageSignals(void* args) {
 	struct sigaction action;
 	action.sa_handler = &shell_signalHandler;
 	TRY(sigaction(SIGCHLD, &action, NULL));
-
-	/* Unblock signals from children */
-	TRY(pthread_sigmask(SIG_UNBLOCK, &childSigSet, NULL));
-
+	
 	while (TRUE) {
-		pause(); /* Allow other threads to get CPU time while no signals come */
+		/* Unblock signals from children */
+		TRY(pthread_sigmask(SIG_UNBLOCK, &childSigSet, NULL));
+		/* Allow other threads to get CPU time while no signals come */
+		pause();
+		/* Temporarily block signals from children */
+		TRY(pthread_sigmask(SIG_BLOCK, &childSigSet, NULL));
+
+		/* Update global number of finished children */
 		pthread_mutex_lock(&numChildrenMutex);
-		/*finishedChildren = auxFinishedChildren;*/
+		finishedChildren = auxFinishedChildren;
 		pthread_cond_signal(&numChildrenCond);
 		pthread_mutex_unlock(&numChildrenMutex);
 	}
@@ -338,8 +345,7 @@ void shell_signalHandler(int sig) {
 		processDataPtr->status = status;
 		processDataPtr->finishTime = globalFinishTime;
 
-		/*auxFinishedChildren ++;*/
-		runningChlidren --;
+		auxFinishedChildren ++;
 	}
 	if (pid < 0 && errno != ECHILD) {
 		char errorMessage[] = "Error: waitpid";
@@ -382,8 +388,7 @@ void shell_pushInstruction(char* circuitName, char* clientPipeName) {
 void shell_waitForAll()
 {
 	TRY(pthread_mutex_lock(&numChildrenMutex));
-	/*while (startedChildren > finishedChildren)*/
-	while (runningChlidren > 0)
+	while (startedChildren > finishedChildren)
 		TRY(pthread_cond_wait(&numChildrenCond, &numChildrenMutex));
 	TRY(pthread_mutex_unlock(&numChildrenMutex));
 }

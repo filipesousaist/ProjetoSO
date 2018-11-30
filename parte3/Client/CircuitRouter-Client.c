@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,10 +10,27 @@
 #include "../lib/buffers.h"
 
 #define SHELL_PIPE_NAME "/tmp/CircuitRouter-AdvShell.pipe"
-#define CLIENT_PIPE_DIR_TEMPLATE "/tmp/CircuitRouter-Client-XXXXXX"
 
 #define TRY(EXPRESSION) if ((EXPRESSION) < 0) {perror(NULL); exit(1);}
 
+char clientPipeName[CLIENT_MAX_PIPE_NAME];
+char clientPipeDirName[] = "/tmp/CircuitRouter-Client-XXXXXX";
+
+void pipeSignalHandler(int sig) {
+	char pipeError[] = "Shell pipe does not exist\n";
+	write(2, pipeError, sizeof(pipeError));
+	/* Delete pipe */
+	if (unlink(clientPipeName) != 0) {
+		char unlinkError[] = "Error: unlink\n";
+		write(2, unlinkError, sizeof(unlinkError));
+	}
+	/* Delete pipe directory */
+	if (rmdir(clientPipeDirName) != 0) {
+		char rmdirError[] = "Error: rmdir\n";
+		write(2, rmdirError, sizeof(rmdirError));
+	}
+	_exit(1);
+}
 
 int main(int argc, char const *argv[]) {
 	/* Parse program arguments */
@@ -23,22 +41,23 @@ int main(int argc, char const *argv[]) {
 	char fileName[SHELL_MAX_PIPE_NAME];
 	strcpy(fileName, argv[1]);
 
-	char clientPipeDirName[] = CLIENT_PIPE_DIR_TEMPLATE;
-
 	/* Generate unique filename for the pipe; it will be the first part of the
 	message to send to shell */
-	int clientPipeFd;
 	TRY(mkdtemp(clientPipeDirName));
 
 	/* Create a named pipe using the generated filename */
-	char clientPipeName[CLIENT_MAX_PIPE_NAME];
 	strcpy(clientPipeName, clientPipeDirName);
 	strcat(clientPipeName, "/client.pipe");
 	TRY(mkfifo(clientPipeName, 0600));
 
-	/* Send message */
+	/* Open shell pipe */
 	int shellPipeFd;
 	TRY(shellPipeFd = open(SHELL_PIPE_NAME, O_WRONLY));
+
+	/* Listen to signals of type SIGPIPE */
+	struct sigaction action;
+	action.sa_handler = &pipeSignalHandler;
+	TRY(sigaction(SIGPIPE, &action, NULL));
 
 	int clientPipeNameLength = strlen(clientPipeName);
 
@@ -48,12 +67,13 @@ int main(int argc, char const *argv[]) {
 		message[clientPipeNameLength] = ' ';
 		if (fgets(message + clientPipeNameLength + 1, COMMAND_MAX_SIZE, stdin) \
 			!= NULL) {
-			
+			/* Send message */
 			TRY(write(shellPipeFd, message, strlen(message)));
 
 			/* Recieve message */	
 			char response[MESSAGE_MAX_SIZE];
 			bzero(response, MESSAGE_MAX_SIZE);
+			int clientPipeFd;
 			TRY(clientPipeFd = open(clientPipeName, O_RDONLY));
 			TRY(read(clientPipeFd, response, MESSAGE_MAX_SIZE));
 			TRY(close(clientPipeFd));
