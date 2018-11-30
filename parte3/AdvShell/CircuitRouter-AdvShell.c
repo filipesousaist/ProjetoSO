@@ -117,7 +117,7 @@ int main(int argc, char const *argv[]) {
 
 	/* Create a thread to manage signals */
 	pthread_t signalsThread;
-	TRY(pthread_create(&signalsThread, NULL, &shell_manageSignals, NULL));
+	TRY(pthread_create(&signalsThread, NULL, &shell_manageChildSignals, NULL));
 
 	/* Create a thread to manage inputs from stdin */
 	pthread_t stdinThread;
@@ -273,37 +273,57 @@ void* shell_managePipe(void* argPtr) {
 	char buffer[MESSAGE_MAX_SIZE];
 	char* argVector[4];
 
+	struct sigaction pipeAction;
+	pipeAction.sa_handler = &shell_pipeSignalHandler;
+	TRY(sigaction(SIGPIPE, &pipeAction, NULL));
+
 	while (TRUE) {
 		bzero(message, MESSAGE_MAX_SIZE);
 		bzero(buffer, MESSAGE_MAX_SIZE);
-		
-		TRY(read(fd, message, MESSAGE_MAX_SIZE));
+
+		int size;
+		TRY(size = read(fd, message, MESSAGE_MAX_SIZE));
+		if (size == 0) {
+			TRY(close(fd));
+			TRY(fd = open(SHELL_PIPE_NAME, O_RDONLY));
+		}
 
 		if (readLineArguments(argVector, 4, buffer, MESSAGE_MAX_SIZE, \
 			message) != -1 \
+			&& argVector[1] != NULL \
 			&& strcmp(argVector[1], "run") == 0 \
 			&& argVector[2] != NULL)
 
 			shell_pushInstruction(argVector[2], argVector[0]);
-		else { /* Invalid command */
+		else if (argVector[0] != NULL) { /* Invalid command */
 			int clientFd;
 			TRY(clientFd = open(argVector[0], O_WRONLY));
 			char messageToClient[] = "Command not supported.";
-			TRY(write(clientFd, messageToClient, strlen(messageToClient)));
-			TRY(close(clientFd));
+			if (write(clientFd, messageToClient, sizeof(messageToClient)) < 0) {
+				if (errno == EPIPE)
+					fputs("Cannot access client pipe\n", stderr);
+				else {
+					perror("write");
+					exit(1);
+				}
+			}
+			else
+				TRY(close(clientFd));
 		}
+		else
+			fputs("No pipe name\n", stderr);
 	}
 }
 
 
 /* =============================================================================
- * shell_manageSignals
+ * shell_manageChildSignals
  * =============================================================================
  */
-void* shell_manageSignals(void* args) {
+void* shell_manageChildSignals(void* args) {
 	/* Replace signal handler for SIGCHLD */
 	struct sigaction action;
-	action.sa_handler = &shell_signalHandler;
+	action.sa_handler = &shell_childSignalHandler;
 	TRY(sigaction(SIGCHLD, &action, NULL));
 	
 	while (TRUE) {
@@ -324,10 +344,10 @@ void* shell_manageSignals(void* args) {
 
 
 /* =============================================================================
- * shell_signalHandler
+ * shell_childSignalHandler
  * =============================================================================
  */
-void shell_signalHandler(int sig) {
+void shell_childSignalHandler(int sig) {
 	CLOCK_READ(mainClock, &globalFinishTime);
 
 	/* Check which processes might have ended */
@@ -353,6 +373,9 @@ void shell_signalHandler(int sig) {
 		_exit(1);
 	}
 	/* Else, result was 0 or ECHILD -> no more children left to wait for */
+}
+
+void shell_pipeSignalHandler(int sig) {
 }
 
 
