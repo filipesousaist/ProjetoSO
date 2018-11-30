@@ -286,6 +286,7 @@ void* shell_managePipe(void* argPtr) {
 		if (size == 0) {
 			TRY(close(fd));
 			TRY(fd = open(SHELL_PIPE_NAME, O_RDONLY));
+			continue;
 		}
 
 		if (readLineArguments(argVector, 4, buffer, MESSAGE_MAX_SIZE, \
@@ -307,8 +308,7 @@ void* shell_managePipe(void* argPtr) {
 					exit(1);
 				}
 			}
-			else
-				TRY(close(clientFd));
+			TRY(close(clientFd));
 		}
 		else
 			fputs("No pipe name\n", stderr);
