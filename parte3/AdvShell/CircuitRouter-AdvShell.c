@@ -84,6 +84,7 @@ CLOCK_T mainClock;
 TIME_T globalFinishTime;
 
 sigset_t childSigSet; /* Auxiliary set which will only contain SIGCHLD */
+sigset_t pipeSigSet; /* Auxiliary set which will only contain SIGPIPE */
 
 
 /* =============================================================================
@@ -109,11 +110,17 @@ int main(int argc, char const *argv[]) {
 		exit(1);
 	}
 
-	/* Block signals from children; all "child" threads will inherit this 
+	/* Block signals from children; all created threads will inherit this 
 	behaviour */
 	TRY(sigemptyset(&childSigSet));
 	TRY(sigaddset(&childSigSet, SIGCHLD));
 	TRY(pthread_sigmask(SIG_BLOCK, &childSigSet, NULL));
+
+	/* Block signals from pipes; all created threads will inherit this 
+	behaviour */
+	TRY(sigemptyset(&pipeSigSet));
+	TRY(sigaddset(&pipeSigSet, SIGPIPE));
+	TRY(pthread_sigmask(SIG_BLOCK, &pipeSigSet, NULL));
 
 	/* Create a thread to manage signals */
 	pthread_t signalsThread;
@@ -139,10 +146,10 @@ int main(int argc, char const *argv[]) {
 			(processData_t*) vector_popBack(processDataVectorPtr);
 
 		char* statusStr = (exitedNormally(dataPtr->status) ? "OK" : "NOK");
-		double timeDiff = \
+		long timeDiff = \
 			TIME_DIFF_SECONDS(dataPtr->startTime, dataPtr->finishTime);
 
-		printf("CHILD EXITED (PID=%li; return %s; %lf s)\n", \
+		printf("CHILD EXITED (PID=%li; return %s; %li s)\n", \
 				(long) dataPtr->pid, statusStr, timeDiff);
 
 		free(dataPtr);
@@ -273,9 +280,12 @@ void* shell_managePipe(void* argPtr) {
 	char buffer[MESSAGE_MAX_SIZE];
 	char* argVector[4];
 
+	/* Define handler for SIGPIPE */
 	struct sigaction pipeAction;
 	pipeAction.sa_handler = &shell_pipeSignalHandler;
 	TRY(sigaction(SIGPIPE, &pipeAction, NULL));
+
+	TRY(pthread_sigmask(SIG_UNBLOCK, &pipeSigSet, NULL));
 
 	while (TRUE) {
 		bzero(message, MESSAGE_MAX_SIZE);
@@ -376,6 +386,7 @@ void shell_childSignalHandler(int sig) {
 }
 
 void shell_pipeSignalHandler(int sig) {
+	/* do nothing */
 }
 
 

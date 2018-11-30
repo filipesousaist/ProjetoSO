@@ -17,7 +17,7 @@ char clientPipeName[CLIENT_MAX_PIPE_NAME];
 char clientPipeDirName[] = "/tmp/CircuitRouter-Client-XXXXXX";
 
 void pipeSignalHandler(int sig) {
-	char pipeError[] = "Shell pipe does not exist\n";
+	char pipeError[] = "Cannot access shell pipe\n";
 	write(2, pipeError, sizeof(pipeError));
 	/* Delete pipe */
 	if (unlink(clientPipeName) != 0) {

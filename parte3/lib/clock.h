@@ -10,8 +10,8 @@
 #define CLOCK_READ(clock, timePtr) clock_gettime(clock, timePtr);
 
 #define TIME_DIFF_SECONDS(start, stop) \
-    (((double)(stop.tv_sec)  + (double)(stop.tv_nsec / 1000000000.0)) - \
-     ((double)(start.tv_sec) + (double)(start.tv_nsec / 1000000000.0)))
+    ((long) (((double)(stop.tv_sec)  + (double)(stop.tv_nsec / 1000000000.0)) - \
+     ((double)(start.tv_sec) + (double)(start.tv_nsec / 1000000000.0))))
 
 #endif /* CLOCK_H */
 

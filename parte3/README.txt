@@ -3,7 +3,7 @@
 	Ano letivo de 2018/2019
 
 	Estrutura de diretórios:
-		proj2/
+		proj3/
 			inputs/
 				generate.py
 				random-x32-y32-z3-n64.txt
@@ -17,18 +17,10 @@
 				random-x128-y128-z5-n128.txt
 				random-x256-y256-z3-n256.txt
 				random-x256-y256-z5-n256.txt
-				random-x512-y512-z7-n512.txt
-			shell_inp/
-				input1.txt
-				input2.txt
-				input3.txt
-				input4.txt
-			solver_inp/
-				input1.txt
-				input2.txt
-				input3.txt
-				input4.txt				
+				random-x512-y512-z7-n512.txt			
 			lib/
+				buffers.h
+				clock.h
 				commandlinereader.c
 				commandlinereader.h
 				list.c
@@ -72,10 +64,8 @@
 				Makefile
 			Client/
 				CircuitRouter-Client.c
-				MakeFile
-			inputs.txt
-			cleanRes.sh
-			MakeFile
+				Makefile
+			Makefile
 		
 
 	Compilação:
@@ -83,29 +73,11 @@
 			~/...$ cd proj3/
 		2-Executar o ficheiro de compilação (MakeFile) global, no modo pretendido.
 			2.1-Compilar todos os ficheiros:
-				~/.../proj2$ make
+				~/.../proj3$ make
 			2.2-Compilar todos os ficheiros (em modo debug):
-				~/.../proj2$ make debug
+				~/.../proj3$ make debug
 			2.3-Eliminar os executáveis e ficheiros com extensão ".o":
-				~/.../proj2$ make clean
-
-
-	Execução (SeqSolver/ParSolver):
-		1-Aceder a proj2/.
-			~/...$ cd proj2/
-		2-Executar o programa pretendido.
-			2.1-SeqSolver:
-				~/...$ ./CircuitRouter-SeqSolver [INPUT_FILENAME]
-			2.2-ParSolver:
-				~/...$ ./CircuitRouter-ParSolver [INPUT_FILENAME] -t [NUM_THREADS]
-
-
-	Execução (testes automáticos):
-		1-Aceder a proj2/.
-			~/...$ cd proj2/
-		2-Executar o executável (doTest.sh) com 2 argumentos - número máximo de threads e nome do ficheiro de input.
-			~/.../proj2$ ./doTest.sh [MAX_THREADS] [INPUT_FILENAME]
-
+				~/.../proj3$ make clean	
 
 	Características do CPU:
 		4 cores: 

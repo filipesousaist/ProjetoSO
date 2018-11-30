@@ -52,8 +52,10 @@
 
 
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -199,6 +201,10 @@ static void deleteCoordinateLocksVector(vector_t* coordinateLocksVectorPtr) {
     }
 
     vector_free(coordinateLocksVectorPtr);
+}
+
+static void pipeSignalHandler(int sig) {
+    /* do nothing */
 }
 
 
@@ -375,12 +381,24 @@ int main(int argc, char** argv) {
     }
     list_free(pathVectorListPtr);
 
+    /* Define pipe signal handler */
+    struct sigaction pipeAction;
+    pipeAction.sa_handler = &pipeSignalHandler;
+    TRY(sigaction(SIGPIPE, &pipeAction, NULL));
+
     /* Send message back to client */
     if (global_params[PARAM_USEPIPES] == 1) {
         int clientPipeFd;
         TRY(clientPipeFd = open(global_clientPipeName, O_WRONLY));
         char messageToClient[] = "Circuit solved";
-        TRY(write(clientPipeFd, messageToClient, strlen(messageToClient)));
+        if (write(clientPipeFd, messageToClient, sizeof(messageToClient)) < 0) {
+            if (errno == EPIPE)
+                fputs("Cannot access client pipe\n", stderr);
+            else {
+                perror("write");
+                exit(1);
+            }
+        }
         TRY(close(clientPipeFd));
     }
 
